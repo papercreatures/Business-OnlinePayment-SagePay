@@ -1,5 +1,8 @@
 Revision history for Perl extension Business::SagePay.
 
+0.09  Fri Apr 17 2009
+      - New friendly status codes
+
 0.08  Fri Apr 17 2009
       - Improve debugging
       - Catch more status codes

@@ -7,7 +7,7 @@ use Net::SSLeay qw(make_form post_https);
 use base qw(Business::OnlinePayment);
 use Data::Dumper;
 
-our $VERSION = '0.08';
+our $VERSION = '0.09';
 
 # CARD TYPE MAP
 
@@ -38,10 +38,12 @@ my $status = {
   5027 => 'Card start date is invalid',
   5028 => 'Card expiry date is invalid',
   3107 => 'Please ensure you have entered your full name, not just your surname',
-  3069 => 'Your card type is not supported by this vendor',
+  3069 => 'Your card type is not supported by this vendor. Please try a different card',
   3057 => 'Your card security number was incorrect. This is normally the last 3 digits on the back of your card',
   4021 => 'Your card number was incorrect',
   5018 => "Your card security number was the incorrect length. This is normally the last 3 digits on the back of your card",
+  3130 => "Your state was incorrect. Please use the standard two character state code",
+  3068 => "Your card type is not supported by this vendor. Please try a different card",
 };
 
 #ACTION MAP
