@@ -1,7 +1,6 @@
 package Business::OnlinePayment::SagePay;
 
 use strict;
-use warnings;
 use Carp;
 use Net::SSLeay qw(make_form post_https);
 use base qw(Business::OnlinePayment);
@@ -176,6 +175,9 @@ sub submit_3d {
     || $rf->{'Status'} eq 'AUTHENTICATED' 
     ?  1 : 0)) {
     $self->error_message('Your card failed the password check.');
+    if($ENV{'SAGEPAY_DEBUG_ERROR_ONLY'}) {
+      warn Dumper($rf);
+    }
     return 0;
   } else{
     return 1;
@@ -367,7 +369,7 @@ sub submit {
   $content{'expiration'} =~ s#/##g;
   $content{'startdate'} =~ s#/##g if $content{'startdate'};
 
-  my $card_name = $content{'name_on_card'}||$content{'first_name'} . ' ' . $content{'last_name'};
+  my $card_name = $content{'name_on_card'}||$content{'first_name'} . ' ' . ($content{'last_name'}||"");
   my $customer_name = $content{'customer_name'}
   || $content{'first_name'} ? $content{'first_name'} . ' ' . $content{'last_name'} : undef;
   $content{'last_name'} ||= $content{'first_name'}; # new protocol requires first and last name - do some people even have both!?
