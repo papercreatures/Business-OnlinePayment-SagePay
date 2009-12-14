@@ -6,7 +6,7 @@ use Net::SSLeay qw(make_form post_https);
 use base qw(Business::OnlinePayment);
 use Data::Dumper;
 
-our $VERSION = '0.09';
+our $VERSION = '0.10';
 
 # CARD TYPE MAP
 

@@ -1,5 +1,8 @@
 Revision history for Perl extension Business::SagePay.
 
+0.10  Fri Apr 17 2009
+      - show debug for 3Dsecure fails
+
 0.09  Fri Apr 17 2009
       - New friendly status codes
 
