@@ -1,5 +1,11 @@
 Revision history for Perl extension Business::SagePay.
 
+0.12  Wed Feb 17 2010
+      - support 'international maestro' as card type (handled as maestro).
+
+0.11  Tues Feb 16 2010
+      - visa debit now sent as DELTA as confirmed by sagepay support.
+
 0.10  Fri Apr 17 2009
       - show debug for 3Dsecure fails
 
