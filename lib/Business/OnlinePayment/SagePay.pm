@@ -4,9 +4,9 @@ use strict;
 use Carp;
 use Net::SSLeay qw(make_form post_https);
 use base qw(Business::OnlinePayment);
-use Data::Dumper;
+use Devel::Dwarn;
 
-our $VERSION = '0.12';
+our $VERSION = '0.13';
 
 # CARD TYPE MAP
 
@@ -27,6 +27,9 @@ my %card_type = (
 );
 
 my $status = {
+  TIMEOUT => 'There was a problem communicating with the payment server, please try later',
+  UNKNOWN => 'There was an unknown problem taking your payment. Please try again',
+  '3D_PASS' => 'Your card failed the password check.',
   2000 => 'Your card was declined by the bank.',
   5013 => 'Your card has expired.',
   3078 => 'Your e-mail was invalid.',
@@ -44,14 +47,15 @@ my $status = {
   5018 => "Your card security number was the incorrect length. This is normally the last 3 digits on the back of your card",
   3130 => "Your state was incorrect. Please use the standard two character state code",
   3068 => "Your card type is not supported by this vendor. Please try a different card",
+  5055 => "Your postcode had incorrect characters. Please re-enter",
 };
 
 #ACTION MAP
 my %action = (
-    'normal authorization'    => 'PAYMENT',       # Take Payment now
-    'authorization only'      => 'AUTHENTICATE',  # Store details at sagepay with 3D+address check
-    'post authorization'      => 'AUTHORISE',	    # Post-Auth
-    'refund'                  => 'REFUND',
+  'normal authorization' => 'PAYMENT',
+  'authorization only'   => 'AUTHENTICATE',
+  'post authorization'   => 'AUTHORISE',
+  'refund'               => 'REFUND',
 );
 
 my %servers = (
@@ -62,6 +66,8 @@ my %servers = (
     authorise => '/gateway/service/authorise.vsp',
     refund => '/gateway/service/refund.vsp',
     cancel => '/gateway/service/cancel.vsp',
+    token => '/gateway/service/directtoken.vsp',
+    remove_token => '/gateway/service/removetoken.vsp',
     port => 443,
   },
   test => {
@@ -71,6 +77,8 @@ my %servers = (
     authorise => '/gateway/service/authorise.vsp',
     refund => '/gateway/service/refund.vsp',
     cancel => '/gateway/service/cancel.vsp',
+    token => '/gateway/service/directtoken.vsp',
+    remove_token => '/gateway/service/removetoken.vsp',
     port => 443,
   },
   simulator => {
@@ -80,6 +88,8 @@ my %servers = (
     authorise => '/Simulator/VSPServerGateway.asp?service=VendorAuthoriseTx ',
     refund => '/Simulator/VSPServerGateway.asp?service=VendorRefundTx ',
     cancel => '/Simulator/VSPServerGateway.asp?service=VendorCancelTx',
+    token => '/Simulator/VSPServerGateway.asp?Service=VendorToken',
+    remove_token => '/gateway/service/removetoken.vsp',
     port => 443,
   },
   timeout => {
@@ -111,9 +121,9 @@ sub set_server {
 sub set_defaults {
   my $self = shift;
   $self->set_server('live');
-
-  $self->build_subs(qw/protocol currency cvv2_response postcode_response error_code
-     require_3d forward_to invoice_number authentication_key pareq cross_reference callback/);
+  $self->build_subs(
+    qw/protocol currency cvv2_response postcode_response error_code require_3d 
+    forward_to invoice_number authentication_key pareq cross_reference callback/);
   $self->protocol('2.23');
   $self->currency('GBP');
   $self->require_3d(0);
@@ -138,14 +148,15 @@ sub format_amount {
 }
 
 sub submit_3d {
-	my $self = shift;
-        my %content = $self->content;
-        my %post_data = (
-          ( map { $_ => $content{$_} } qw(login password) ),
-          MD    => $content{'cross_reference'},
-          PaRes => $content{'pares'},
-        );
-  $self->set_server($ENV{'SAGEPAY_F_SIMULATOR'} ? 'simulator' : 'test') if $self->test_transaction;
+  my $self = shift;
+  my %content = $self->content;
+  my %post_data = (
+    ( map { $_ => $content{$_} } qw(login password) ),
+    MD    => $content{'cross_reference'},
+    PaRes => $content{'pares'},
+  );
+  $self->set_server($ENV{'SAGEPAY_F_SIMULATOR'} ? 'simulator' : 'test') 
+    if $self->test_transaction;
   my ($page, $response, %headers) = 
     post_https(
       $self->server,
@@ -155,7 +166,7 @@ sub submit_3d {
       make_form(%post_data)
     );
   unless ($page) {
-    $self->error_message('There was a problem communicating with the payment server, please try later');
+    $self->error_message($status->{TIMEOUT});
     return;
   }
 
@@ -163,7 +174,7 @@ sub submit_3d {
 
   if($ENV{'SAGEPAY_DEBUG'}) {
     warn "3DSecure:";
-    warn Dumper($rf);
+    Dwarn $rf;
   }
 
   $self->server_response($rf);
@@ -175,9 +186,9 @@ sub submit_3d {
     $self->is_success($rf->{'Status'} eq 'OK'
     || $rf->{'Status'} eq 'AUTHENTICATED' 
     ?  1 : 0)) {
-    $self->error_message('Your card failed the password check.');
+    $self->error_message($status->{'3D_PASS'});
     if($ENV{'SAGEPAY_DEBUG_ERROR_ONLY'}) {
-      warn Dumper($rf);
+      Dwarn $rf;
     }
     return 0;
   } else{
@@ -188,9 +199,7 @@ sub submit_3d {
 
 sub void_action { #void authorization
   my $self = shift;
-  croak "Need vendor ID"
-    unless defined $self->vendor;
-  $self->set_server($ENV{'SAGEPAY_F_SIMULATOR'} ? 'simulator' : 'test') if $self->test_transaction;
+  $self->initialise;
   my %content = $self->content();
   my %field_mapping = (
     VpsProtocol   => \($self->protocol),
@@ -204,7 +213,7 @@ sub void_action { #void authorization
   $post_data{'TxType'} = 'VOID';
 
   if($ENV{'SAGEPAY_DEBUG'}) {
-    warn Dumper(\%post_data);
+    Dwarn %post_data;
   }
 
   $self->path($servers{$self->{'_server'}}->{'cancel'});
@@ -219,7 +228,7 @@ sub void_action { #void authorization
       )
     );
   unless ($page) {
-    $self->error_message('There was a problem communicating with the payment server, please try later');
+    $self->error_message($status->{TIMEOUT});
     $self->is_success(0);
     return;
   }
@@ -228,24 +237,22 @@ sub void_action { #void authorization
 
   if($ENV{'SAGEPAY_DEBUG'}) {
     warn "Cancellation:";
-    warn Dumper($rf);
+    Dwarn $rf;
   }
 
   $self->server_response($rf);
   $self->result_code($rf->{'Status'});
   unless($self->is_success($rf->{'Status'} eq 'OK'? 1 : 0)) {
     if($ENV{'SAGEPAY_DEBUG_ERROR_ONLY'}) {
-      warn Dumper($rf);
+      Dwarn $rf;
     }
     $self->error_message($rf->{'StatusDetail'});
   }  
-  }
+}
 
 sub cancel_action { #cancel authentication
   my $self = shift;
-  croak "Need vendor ID"
-    unless defined $self->vendor;
-  $self->set_server($ENV{'SAGEPAY_F_SIMULATOR'} ? 'simulator' : 'test') if $self->test_transaction;
+  $self->initialise;
   my %content = $self->content();
   my %field_mapping = (
     VpsProtocol   => \($self->protocol),
@@ -259,7 +266,7 @@ sub cancel_action { #cancel authentication
   $post_data{'TxType'} = 'CANCEL';
 
   if($ENV{'SAGEPAY_DEBUG'}) {
-    warn Dumper(\%post_data);
+    Dwarn %post_data;
   }
 
   $self->path($servers{$self->{'_server'}}->{'cancel'});
@@ -274,34 +281,39 @@ sub cancel_action { #cancel authentication
       )
     );
   unless ($page) {
-    $self->error_message('There was a problem communicating with the payment server, please try later');
+    $self->error_message($status->{TIMEOUT});
     $self->is_success(0);
-  	return;
+    return;
   }
 
   my $rf = $self->_parse_response($page);
 
   if($ENV{'SAGEPAY_DEBUG'}) {
     warn "Cancellation:";
-    warn Dumper($rf);
+    Dwarn $rf;
   }
 
   $self->server_response($rf);
   $self->result_code($rf->{'Status'});
   unless($self->is_success($rf->{'Status'} eq 'OK'? 1 : 0)) {
     if($ENV{'SAGEPAY_DEBUG_ERROR_ONLY'}) {
-      warn Dumper($rf);
+      Dwarn $rf;
     }
     $self->error_message($rf->{'StatusDetail'});
   }  
 }
 
-sub auth_action { 
+sub initialise {
   my $self = shift;
-  my $action = shift;
   croak "Need vendor ID"
     unless defined $self->vendor;
-  $self->set_server($ENV{'SAGEPAY_F_SIMULATOR'} ? 'simulator' : 'test') if $self->test_transaction;
+  $self->set_server($ENV{'SAGEPAY_F_SIMULATOR'} ? 'simulator' : 'test') 
+    if $self->test_transaction;
+}
+
+sub auth_action { 
+  my ($self, $action) = @_;
+  $self->initialise;
   
   my %content = $self->content();
   my %field_mapping = (
@@ -310,7 +322,7 @@ sub auth_action {
     TxType      => \($action{lc $content{'action'}}),
     VendorTxCode=> 'invoice_number',
     Description => 'description',
-    Currency	=> \($self->currency),
+    Currency  => \($self->currency),
     Amount      => \(format_amount($content{'amount'})),
     RelatedVPSTxId => 'parent_auth',
     RelatedVendorTxCode => 'parent_invoice_number',
@@ -319,7 +331,7 @@ sub auth_action {
   my %post_data = $self->do_remap(\%content,%field_mapping);
 
   if($ENV{'SAGEPAY_DEBUG'}) {
-    warn Dumper(\%post_data);
+    Dwarn %post_data;
   }
 
   $self->path($servers{$self->{'_server'}}->{lc $post_data{'TxType'}});
@@ -334,7 +346,7 @@ sub auth_action {
       )
     );
   unless ($page) {
-    $self->error_message('There was a problem communicating with the payment server, please try later');
+    $self->error_message($status->{TIMEOUT});
     $self->is_success(0);
     return;
   }
@@ -343,7 +355,7 @@ sub auth_action {
 
   if($ENV{'SAGEPAY_DEBUG'}) {
     warn "Authorization:";
-    warn Dumper($rf);
+    Dwarn $rf;
   }
 
   $self->server_response($rf);
@@ -351,46 +363,121 @@ sub auth_action {
   $self->authorization($rf->{'VPSTxId'});
   unless($self->is_success($rf->{'Status'} eq 'OK'? 1 : 0)) {
     if($ENV{'SAGEPAY_DEBUG_ERROR_ONLY'}) {
-      warn Dumper($rf);
+      Dwarn $rf;
     }
     my $code = substr $rf->{'StatusDetail'}, 0 ,4;
     $self->error_code($code);
-    $self->error_message($status->{$code} || 'There was an unknown problem taking your payment. Please try again');
+    $self->error_message($status->{$code} || $status->{UNKNOWN});
   }
 
 }
 
-sub submit {
-  my $self = shift;
-  croak "Need vendor ID"
-    unless defined $self->vendor;
-  $self->set_server($ENV{'SAGEPAY_F_SIMULATOR'} ? 'simulator' : 'test') if $self->test_transaction;
-  
+sub sanitised_content {
+  my ($self,$content) = @_;
   my %content = $self->content();
   $content{'expiration'} =~ s#/##g;
   $content{'startdate'} =~ s#/##g if $content{'startdate'};
 
-  my $card_name = $content{'name_on_card'}||$content{'first_name'} . ' ' . ($content{'last_name'}||"");
-  my $customer_name = $content{'customer_name'}
-  || $content{'first_name'} ? $content{'first_name'} . ' ' . $content{'last_name'} : undef;
-  $content{'last_name'} ||= $content{'first_name'}; # new protocol requires first and last name - do some people even have both!?
+  $content{'card_name'} = 
+       $content{'name_on_card'} 
+    || $content{'first_name'} . ' ' . ($content{'last_name'}||"");
+  $content{'customer_name'} = 
+       $content{'customer_name'}
+    || $content{'first_name'} ? 
+          $content{'first_name'} . ' ' . $content{'last_name'} : undef;
+  # new protocol requires first and last name - do some people even have both!?
+  $content{'last_name'} ||= $content{'first_name'}; 
+  $content{'action'} = lc $content{'action'};
+  $content{'card_type'} = $card_type{lc $content{'type'}};
+  $content{'amount'} = format_amount($content{'amount'})
+    if $content{'amount'};
+  
+  return \%content;
+}
+
+sub post_request {
+  my ($self,$type,$data) = @_;
+  
+  $self->path($servers{$self->{'_server'}}->{$type});
+  
+  if($ENV{'SAGEPAY_DEBUG'}) {
+    warn sprintf("Posting to %s:%s%s",
+      $self->server, $self->port, $self->path);
+    Dwarn $data;
+  }
+  
+  my ($page, $response, %headers) = post_https(
+    $self->server,
+    $self->port,
+    $self->path,
+    undef,
+    make_form( %$data )
+  );
+  
+  unless ($page) {
+    $self->error_message($status->{TIMEOUT});
+    $self->is_success(0);
+    return;
+  }
+
+  my $rf = $self->_parse_response($page);
+  $self->server_response($rf);
+  $self->result_code($rf->{'Status'});
+  $self->authorization($rf->{'VPSTxId'});
+  $self->authentication_key($rf->{'SecurityKey'});
+}
+
+sub token_action { #get token from card details
+  my $self = shift;
+  $self->initialise;
   my %field_mapping = (
     VpsProtocol => \($self->protocol),
     Vendor      => \($self->vendor),
-    TxType      => \($action{lc $content{'action'}}),
+    TxType      => \('TOKEN'),
+    CardHolder  => 'card_name',
+    CardNumber  => 'card_number',
+    StartDate => 'startdate',
+    ExpiryDate  => 'expiration',
+    IssueNumber => 'issue_number',
+    CV2         => 'cvv2',
+    CardType  => 'card_type',
+    Currency    => \($self->currency),
+  );
+  $self->post_request('token',{
+    $self->do_remap(
+      $self->sanitised_content,
+      %field_mapping
+    )
+  });
+}
+
+sub token_submit { #submit a payment with token
+  my $self = shift;
+  $self->initialise;
+  
+}
+
+sub submit {
+  my $self = shift;
+  $self->initialise;
+  my %content = $self->sanitised_content;
+  
+  my %field_mapping = (
+    VpsProtocol => \($self->protocol),
+    Vendor      => \($self->vendor),
+    TxType      => 'action',
     VendorTxCode=> 'invoice_number',
     Description => 'description',
     Currency    => \($self->currency),
-    CardHolder  => \($card_name),
+    CardHolder  => 'card_name',
     CardNumber  => 'card_number',
     CV2         => 'cvv2',
-    ExpiryDate	=> 'expiration',
-    StartDate	=> 'startdate',
-    Amount      => \(format_amount($content{'amount'})),
+    ExpiryDate  => 'expiration',
+    StartDate => 'startdate',
+    Amount      => 'amount',
     IssueNumber => 'issue_number',
-    CardType	=> \($card_type{lc $content{'type'}}),
+    CardType  => 'card_type',
     ApplyAVSCV2 => 0,
-
     BillingSurname  => 'last_name',
     BillingFirstnames  => 'first_name',
     BillingAddress1  => 'address',
@@ -407,21 +494,26 @@ sub submit {
     DeliveryCountry => 'country',
     DeliveryState => 'state',
 
-    CustomerName    => \($customer_name),
+    CustomerName    => 'customer_name',
     ContactNumber   => 'telephone',
-    ContactFax		=> 'fax',
-    CustomerEmail	=> 'email',
+    ContactFax    => 'fax',
+    CustomerEmail => 'email',
   );
 
   my %post_data = $self->do_remap(\%content,%field_mapping);
 
   if($ENV{'SAGEPAY_DEBUG'}) {
     warn "Authentication Form:";
-    warn Dumper({%post_data, CV2 => "XXX", CardNumber => "XXXX XXXX XXXX XXXX"});
+    Dwarn {
+      %post_data, 
+      CV2 => "XXX", 
+      CardNumber => "XXXX XXXX XXXX XXXX"
+    };
   }
 
-  $self->path($servers{$self->{'_server'}}->{'authorise'}) if $post_data{'TxType'} eq 'AUTHORISE';
-  my ($page, $response, %headers) =	post_https(
+  $self->path($servers{$self->{'_server'}}->{'authorise'}) 
+    if $post_data{'TxType'} eq 'AUTHORISE';
+  my ($page, $response, %headers) = post_https(
     $self->server,
     $self->port,
     $self->path,
@@ -431,7 +523,7 @@ sub submit {
     )
   );
   unless ($page) {
-    $self->error_message('There was a problem communicating with the payment server, please try later');
+    $self->error_message($status->{TIMEOUT});
     $self->is_success(0);
     return;
   }
@@ -452,7 +544,7 @@ sub submit {
   $self->postcode_response($rf->{'PostCodeResult'});
   if($ENV{'SAGEPAY_DEBUG'}) {
     warn "Authentication Response:";
-    warn Dumper($rf);
+    Dwarn $rf;
   }
   unless($self->is_success(
     $rf->{'Status'} eq '3DAUTH' ||
@@ -462,10 +554,10 @@ sub submit {
     ? 1 : 0)) {
       my $code = substr $rf->{'StatusDetail'}, 0 ,4;
       if($ENV{'SAGEPAY_DEBUG_ERROR_ONLY'}) {
-        warn Dumper($rf);
+        Dwarn $rf;
       }
       $self->error_code($code);
-      $self->error_message($status->{$code} || 'There was an unknown problem taking your payment. Please try again');
+      $self->error_message($status->{$code} || $status->{UNKNOWN});
     }
 }
 
