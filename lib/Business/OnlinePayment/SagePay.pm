@@ -387,7 +387,7 @@ sub sanitised_content {
           $content{'first_name'} . ' ' . $content{'last_name'} : undef;
   # new protocol requires first and last name - do some people even have both!?
   $content{'last_name'} ||= $content{'first_name'}; 
-  $content{'action'} = lc $content{'action'};
+  $content{'action'} = $action{ lc $content{'action'} };
   $content{'card_type'} = $card_type{lc $content{'type'}};
   $content{'amount'} = format_amount($content{'amount'})
     if $content{'amount'};
@@ -460,7 +460,7 @@ sub token_submit { #submit a payment with token
 sub submit {
   my $self = shift;
   $self->initialise;
-  my %content = $self->sanitised_content;
+  my $content = $self->sanitised_content;
   
   my %field_mapping = (
     VpsProtocol => \($self->protocol),
@@ -500,7 +500,7 @@ sub submit {
     CustomerEmail => 'email',
   );
 
-  my %post_data = $self->do_remap(\%content,%field_mapping);
+  my %post_data = $self->do_remap($content,%field_mapping);
 
   if($ENV{'SAGEPAY_DEBUG'}) {
     warn "Authentication Form:";
