@@ -1,5 +1,6 @@
 package Business::OnlinePayment::SagePay;
-
+# vim: ts=2 sts=2 sw=2 :
+  
 use strict;
 use Carp;
 use Net::SSLeay qw(make_form post_https);
@@ -24,6 +25,7 @@ my %card_type = (
   'solo' => 'SOLO',
   'diners club' => 'DINERS',
   'jcb' => 'JCB',
+  'paypal' => 'PAYPAL',
 );
 
 my $status = {
@@ -68,6 +70,7 @@ my %servers = (
     cancel => '/gateway/service/cancel.vsp',
     token => '/gateway/service/directtoken.vsp',
     remove_token => '/gateway/service/removetoken.vsp',
+    complete => '/gateway/service/complete.asp',
     port => 443,
   },
   test => {
@@ -79,6 +82,7 @@ my %servers = (
     cancel => '/gateway/service/cancel.vsp',
     token => '/gateway/service/directtoken.vsp',
     remove_token => '/gateway/service/removetoken.vsp',
+    complete => '/gateway/service/complete.asp',
     port => 443,
   },
   simulator => {
@@ -90,6 +94,7 @@ my %servers = (
     cancel => '/Simulator/VSPServerGateway.asp?service=VendorCancelTx',
     token => '/Simulator/VSPServerGateway.asp?Service=VendorToken',
     remove_token => '/gateway/service/removetoken.vsp',
+    complete => '/Simulator/paypalcomplete.asp',
     port => 443,
   },
   timeout => {
@@ -123,10 +128,11 @@ sub set_defaults {
   $self->set_server('live');
   $self->build_subs(
     qw/protocol currency cvv2_response postcode_response error_code require_3d 
-    forward_to invoice_number authentication_key pareq cross_reference callback/);
+    forward_to invoice_number authentication_key pareq cross_reference callback require_paypal/);
   $self->protocol('2.23');
   $self->currency('GBP');
   $self->require_3d(0);
+  $self->require_paypal(0);
 }
 
 sub do_remap {
@@ -192,6 +198,84 @@ sub submit_3d {
     }
     return 0;
   } else{
+    return 1;
+  }
+}
+
+sub submit_paypal {
+  my $self = shift;
+
+  my $content = $self->content;
+
+  my %field_mapping = (
+    VpsProtocol => \($self->protocol),
+    Vendor      => \($self->vendor),
+    VPSTxId     => 'authentication_id',
+    Amount      => 'amount',
+  );
+
+  my %post_data = (
+    $self->do_remap($content, %field_mapping),
+    TxType  => 'COMPLETE',
+    Accept  => 'YES',
+  );
+
+  if($ENV{'SAGEPAY_DEBUG'}) {
+    warn "PayPal complete Form:";
+    Dwarn {
+      %post_data, 
+    };
+  }
+
+  $self->set_server($ENV{'SAGEPAY_F_SIMULATOR'} ? 'simulator' : 'test') 
+    if $self->test_transaction;
+
+  $self->path( $servers{ $self->{'_server'} }->{'complete'} );
+
+  my ($page, $response, %headers) = 
+    post_https(
+      $self->server,
+      $self->port,
+      $self->path,
+      undef,
+      make_form(%post_data)
+    );
+
+  unless ($page) {
+    $self->error_message($status->{TIMEOUT});
+    $self->is_success(0);
+    return;
+  }
+
+  my $rf = $self->_parse_response($page);
+
+  if($ENV{'SAGEPAY_DEBUG'}) {
+    warn "PayPal:";
+    Dwarn $rf;
+  }
+
+  $self->server_response($rf);
+  $self->result_code($rf->{'Status'});
+  $self->authorization($rf->{'VPSTxId'});
+  $self->authentication_key($rf->{'SecurityKey'});
+
+  unless($self->is_success(
+    $rf->{'Status'} eq 'OK' ||
+    $rf->{'Status'} eq 'AUTHENTICATED' 
+    ?  1 : 0)
+  ) {
+    my $code = substr $rf->{'StatusDetail'}, 0 ,4;
+
+    if($ENV{'SAGEPAY_DEBUG_ERROR_ONLY'}) {
+      Dwarn $rf;
+    }
+
+    $self->error_code($code);
+    $self->error_message($status->{$code} || $status->{UNKNOWN});
+
+    return 0;
+  }
+  else {
     return 1;
   }
 }
@@ -498,6 +582,8 @@ sub submit {
     ContactNumber   => 'telephone',
     ContactFax    => 'fax',
     CustomerEmail => 'email',
+
+    PayPalCallbackURL => 'paypal_callback_url',
   );
 
   my %post_data = $self->do_remap($content,%field_mapping);
@@ -540,14 +626,23 @@ sub submit {
     $self->pareq($rf->{'PAReq'});
     $self->cross_reference($rf->{'MD'});
   }
+
+  if($self->result_code eq 'PPREDIRECT') {
+    $self->require_paypal(1);
+    $self->forward_to($rf->{'PayPalRedirectURL'});
+  }
+
   $self->cvv2_response($rf->{'CV2Result'});
   $self->postcode_response($rf->{'PostCodeResult'});
+
   if($ENV{'SAGEPAY_DEBUG'}) {
     warn "Authentication Response:";
     Dwarn $rf;
   }
+
   unless($self->is_success(
     $rf->{'Status'} eq '3DAUTH' ||
+    $rf->{'Status'} eq 'PPREDIRECT' ||
     $rf->{'Status'} eq 'OK' ||
     $rf->{'Status'} eq 'AUTHENTICATED' ||
     $rf->{'Status'} eq 'REGISTERED' 

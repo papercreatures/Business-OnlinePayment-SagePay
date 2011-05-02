@@ -5,18 +5,16 @@ use warnings;
 
 use FindBin '$Bin';
 use lib "$Bin/lib";
-use threads;
 
 use Test::More;
 use Business::OnlinePayment;
 use WWW::Mechanize;
-use Storable 'thaw';
 
-use Test::Business::OnlinePayment::SagePay qw(create_transaction create_simple_web_server);
+use Test::Business::OnlinePayment::SagePay qw(create_transaction);
 
 BEGIN {
     if (defined $ENV{SAGEPAY_VENDOR}) {
-        plan tests => 5;
+        plan tests => 8;
     }
     else {
         plan skip_all => 'SAGEPAY_VENDOR environemnt variable not defined}';
@@ -42,12 +40,10 @@ ok($tx->submit, 'Transaction submitted');
 ok($tx->is_success, 'Transaction success');
 
 SKIP: {
-    skip 'SAGEPAY_SIMULATOR_3DSEC environment variable not defined', 1 
+    skip 'SAGEPAY_SIMULATOR_3DSEC environment variable not defined', 4
         unless defined($ENV{SAGEPAY_SIMULATOR_3DSEC}); 
 
     is($tx->result_code, '3DAUTH', '3DSecure response');
-
-    my $thread = threads->create(\&create_simple_web_server);
 
     my $mech = WWW::Mechanize->new;
 
@@ -56,13 +52,30 @@ SKIP: {
         {
             PaReq   => $tx->pareq,
             MD      => $tx->cross_reference,
-            TermUrl => 'http://localhost:15100',
+            TermUrl => 'http://localhost',
         }
     );
 
-    print $mech->content;
+    $mech->submit_form(
+        form_name   => 'txreleaseform',
+        fields      => { clickedButton   => 'ok' },
+    );
 
-    $thread->detach;
+    ok($mech->success, 'Submitted 3DSecure response');
+
+    my $form = $mech->form_name('form');
+
+    $tx->content(
+        cross_reference => $form->value('MD'),
+        pares           => $form->value('PaRes'),
+    );
+
+    $tx->submit_3d;
+
+    my $tx_response = $tx->server_response;
+
+    ok($tx->is_success, '3D secure transaction success');
+    is($tx_response->{'3DSecureStatus'}, 'OK', '3D secure status OK');
 }
 
 done_testing();
