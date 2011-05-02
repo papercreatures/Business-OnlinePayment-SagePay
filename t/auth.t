@@ -1,11 +1,17 @@
 #!/usr/bin/perl
 
+use strict;
+use warnings;
+
 use FindBin '$Bin';
 use lib "$Bin/lib";
 use threads;
 
 use Test::More;
 use Business::OnlinePayment;
+use WWW::Mechanize;
+use Storable 'thaw';
+
 use Test::Business::OnlinePayment::SagePay qw(create_transaction create_simple_web_server);
 
 BEGIN {
@@ -43,15 +49,18 @@ SKIP: {
 
     my $thread = threads->create(\&create_simple_web_server);
 
-use LWP::UserAgent;
-use Storable 'thaw';
-use Data::Dumper;
+    my $mech = WWW::Mechanize->new;
 
-    my $ua = LWP::UserAgent->new;
-    my $response = $ua->get('http://localhost:15100?a=1&b=2');
-    my $result = thaw( $response->content );
+    $mech->post(
+        $tx->forward_to, 
+        {
+            PaReq   => $tx->pareq,
+            MD      => $tx->cross_reference,
+            TermUrl => 'http://localhost:15100',
+        }
+    );
 
-    print Dumper $result;
+    print $mech->content;
 
     $thread->detach;
 }
