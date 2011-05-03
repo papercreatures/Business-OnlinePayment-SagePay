@@ -14,7 +14,7 @@ use Test::Business::OnlinePayment::SagePay qw(create_transaction);
 
 BEGIN {
     if (defined $ENV{SAGEPAY_VENDOR} && $ENV{SAGEPAY_SIMULATOR_PAYPAL}) {
-        plan tests => 5;
+        plan tests => 7;
     }
     else {
         plan skip_all => 'SAGEPAY_VENDOR and/or SAGEPAY_SIMULATOR_PAYPAL environemnt variable not defined}';
@@ -47,29 +47,34 @@ my $vps_id = $tx->authorization;
 
 is($tx->result_code, 'PPREDIRECT', 'PayPal redirect response');
 
-my $mech = WWW::Mechanize->new;
+SKIP: {
+    eval 'use WWW::Mechanize; 1';
+    skip 'WWW::Mechanize not available', 2 if $@;
 
-$mech->get($tx->forward_to);
+    my $mech = WWW::Mechanize->new;
 
-# submit redirection to paypal
-$mech->submit_form(form_name => 'txreleaseform');
+    $mech->get($tx->forward_to);
 
-# submit paypal ok button in simulator
-$mech->submit_form(
-    form_name   => 'txreleaseform',
-    fields      => { clickedButton => 'paypalok' },
-);
+    # submit redirection to paypal
+    $mech->submit_form(form_name => 'txreleaseform');
 
-$tx->content(
-    authentication_id   => $vps_id,
-    amount              => 10,
-);
+    # submit paypal ok button in simulator
+    $mech->submit_form(
+        form_name   => 'txreleaseform',
+        fields      => { clickedButton => 'paypalok' },
+    );
 
-$tx->submit_paypal;
+    $tx->content(
+        authentication_id   => $vps_id,
+        amount              => 10,
+    );
 
-my $tx_response = $tx->server_response;
+    $tx->submit_paypal;
 
-ok($tx->is_success, 'PayPal transaction success');
-is($tx_response->{'3DSecureStatus'}, 'OK', '3D secure status OK');
+    my $tx_response = $tx->server_response;
+
+    ok($tx->is_success, 'PayPal transaction success');
+    is($tx_response->{'Status'}, 'OK', 'Payment status OK');
+}
 
 done_testing();

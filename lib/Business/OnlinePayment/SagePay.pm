@@ -205,7 +205,7 @@ sub submit_3d {
 sub submit_paypal {
   my $self = shift;
 
-  my $content = $self->content;
+  my $content = $self->sanitised_content;
 
   my %field_mapping = (
     VpsProtocol => \($self->protocol),

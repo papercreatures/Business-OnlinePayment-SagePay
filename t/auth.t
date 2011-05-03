@@ -8,7 +8,6 @@ use lib "$Bin/lib";
 
 use Test::More;
 use Business::OnlinePayment;
-use WWW::Mechanize;
 
 use Test::Business::OnlinePayment::SagePay qw(create_transaction);
 
@@ -45,37 +44,42 @@ SKIP: {
 
     is($tx->result_code, '3DAUTH', '3DSecure response');
 
-    my $mech = WWW::Mechanize->new;
+    SKIP: {
+        eval 'use WWW::Mechanize; 1';
+        skip 'WWW::Mechanize not available', 3 if $@;
 
-    $mech->post(
-        $tx->forward_to, 
-        {
-            PaReq   => $tx->pareq,
-            MD      => $tx->cross_reference,
-            TermUrl => 'http://localhost',
-        }
-    );
+        my $mech = WWW::Mechanize->new;
 
-    $mech->submit_form(
-        form_name   => 'txreleaseform',
-        fields      => { clickedButton   => 'ok' },
-    );
+        $mech->post(
+            $tx->forward_to, 
+            {
+                PaReq   => $tx->pareq,
+                MD      => $tx->cross_reference,
+                TermUrl => 'http://localhost',
+            }
+        );
 
-    ok($mech->success, 'Submitted 3DSecure response');
+        $mech->submit_form(
+            form_name   => 'txreleaseform',
+            fields      => { clickedButton   => 'ok' },
+        );
 
-    my $form = $mech->form_name('form');
+        ok($mech->success, 'Submitted 3DSecure response');
 
-    $tx->content(
-        cross_reference => $form->value('MD'),
-        pares           => $form->value('PaRes'),
-    );
+        my $form = $mech->form_name('form');
 
-    $tx->submit_3d;
+        $tx->content(
+            cross_reference => $form->value('MD'),
+            pares           => $form->value('PaRes'),
+        );
 
-    my $tx_response = $tx->server_response;
+        $tx->submit_3d;
 
-    ok($tx->is_success, '3D secure transaction success');
-    is($tx_response->{'3DSecureStatus'}, 'OK', '3D secure status OK');
+        my $tx_response = $tx->server_response;
+
+        ok($tx->is_success, '3D secure transaction success');
+        is($tx_response->{'3DSecureStatus'}, 'OK', '3D secure status OK');
+    }
 }
 
 done_testing();
