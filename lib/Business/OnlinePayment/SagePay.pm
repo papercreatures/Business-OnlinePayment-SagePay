@@ -153,8 +153,8 @@ sub set_defaults {
   my $self = shift;
   $self->set_server('live');
   $self->build_subs(
-    qw/protocol currency cvv2_response postcode_response error_code require_3d 
-    forward_to invoice_number authentication_key pareq cross_reference callback require_paypal/);
+    qw/protocol currency cvv2_response postcode_response address_response error_code require_3d 
+    forward_to invoice_number authentication_key authorization_code pareq cross_reference callback require_paypal/);
   $self->protocol('2.23');
   $self->currency('GBP');
   $self->require_3d(0);
@@ -213,6 +213,7 @@ sub submit_3d {
   $self->result_code($rf->{'Status'});
   $self->authentication_key($rf->{'SecurityKey'});
   $self->authorization($rf->{'VPSTxId'});
+  $self->authorization_code($rf->{'TxAuthNo'});
 
   unless(
     ($self->is_success($rf->{'Status'} eq SAGEPAY_STATUS_OK) || 
@@ -283,7 +284,6 @@ sub submit_paypal {
   $self->server_response($rf);
   $self->result_code($rf->{'Status'});
   $self->authorization($rf->{'VPSTxId'});
-  $self->authentication_key($rf->{'SecurityKey'});
 
   unless($self->is_success(
     $rf->{'Status'} eq SAGEPAY_STATUS_OK ||
@@ -650,6 +650,7 @@ sub submit {
   $self->result_code($rf->{'Status'});
   $self->authorization($rf->{'VPSTxId'});
   $self->authentication_key($rf->{'SecurityKey'});
+  $self->authorization_code($rf->{'TxAuthNo'});
 
   if (
     ($self->result_code eq SAGEPAY_STATUS_3DSECURE) && 
@@ -668,6 +669,7 @@ sub submit {
 
   $self->cvv2_response($rf->{'CV2Result'});
   $self->postcode_response($rf->{'PostCodeResult'});
+  $self->address_response($rf->{'AddressResult'});
 
   if($ENV{'SAGEPAY_DEBUG'}) {
     warn "Authentication Response:";
