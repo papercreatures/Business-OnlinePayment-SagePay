@@ -48,6 +48,7 @@ my $status = {
   3130 => "Your state was incorrect. Please use the standard two character state code",
   3068 => "Your card type is not supported by this vendor. Please try a different card",
   5055 => "Your postcode had incorrect characters. Please re-enter",
+  3055 => "Your card was not recognised. Please try another",
 };
 
 #ACTION MAP
@@ -454,6 +455,25 @@ sub token_action { #get token from card details
 sub token_submit { #submit a payment with token
   my $self = shift;
   $self->initialise;
+  my %field_mapping = (
+    VpsProtocol => \($self->protocol),
+    Vendor      => \($self->vendor),
+    TxType      => \('PAYMENT'),
+    CardHolder  => 'card_name',
+    CardNumber  => 'card_number',
+    StartDate => 'startdate',
+    ExpiryDate  => 'expiration',
+    IssueNumber => 'issue_number',
+    CV2         => 'cvv2',
+    CardType  => 'card_type',
+    Currency    => \($self->currency),
+  );
+  $self->post_request('token',{
+    $self->do_remap(
+      $self->sanitised_content,
+      %field_mapping
+    )
+  });
   
 }
 

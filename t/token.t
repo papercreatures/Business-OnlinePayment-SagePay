@@ -5,14 +5,14 @@ my $tx = Business::OnlinePayment->new(
   'SagePay',
   'vendor' => 'airspace',
 );
-$tx->set_server('simulator');
+$tx->set_server('test');
 $tx->content(
   'name_on_card' => 'Mr Test Test',
-  'card_number' => '0000 0000 0000 0000',
+  'card_number' => '6759000000005462',
   'startdate' => '03/09',
-  'expiration' => '03/20',
-  'issue_number' => 3,
-  'cvv2' => 111,
+  'expiration' => '03/15',
+  'issue_number' => '',
+  'cvv2' => 123,
   'type' => 'maestro',
 );
 
