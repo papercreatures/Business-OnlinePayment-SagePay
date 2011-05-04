@@ -2,12 +2,38 @@ package Business::OnlinePayment::SagePay;
 # vim: ts=2 sts=2 sw=2 :
   
 use strict;
+use warnings;
+
+use base qw(Business::OnlinePayment);
+
 use Carp;
 use Net::SSLeay qw(make_form post_https);
-use base qw(Business::OnlinePayment);
 use Devel::Dwarn;
+use Exporter 'import';
 
 our $VERSION = '0.13';
+
+use constant {
+  SAGEPAY_STATUS_OK               => 'OK',
+  SAGEPAY_STATUS_AUTHENTICATED    => 'AUTHENTICATED',
+  SAGEPAY_STATUS_REGISTERED       => 'REGISTERED',
+  SAGEPAY_STATUS_3DSECURE         => '3DAUTH',
+  SAGEPAY_STATUS_PAYPAL_REDIRECT  => 'PPREDIRECT',
+};
+
+our @STATUS = qw(
+  SAGEPAY_STATUS_OK
+  SAGEPAY_STATUS_AUTHENTICATED
+  SAGEPAY_STATUS_REGISTERED
+  SAGEPAY_STATUS_3DSECURE
+  SAGEPAY_STATUS_PAYPAL_REDIRECT
+);
+
+our @EXPORT_OK = (@STATUS);
+
+our %EXPORT_TAGS = (
+  status => \@STATUS,
+);
 
 # CARD TYPE MAP
 
@@ -189,8 +215,8 @@ sub submit_3d {
   $self->authorization($rf->{'VPSTxId'});
 
   unless(
-    $self->is_success($rf->{'Status'} eq 'OK'
-    || $rf->{'Status'} eq 'AUTHENTICATED' 
+    ($self->is_success($rf->{'Status'} eq SAGEPAY_STATUS_OK) || 
+    ($rf->{'Status'} eq SAGEPAY_STATUS_AUTHENTICATED)
     ?  1 : 0)) {
     $self->error_message($status->{'3D_PASS'});
     if($ENV{'SAGEPAY_DEBUG_ERROR_ONLY'}) {
@@ -260,8 +286,8 @@ sub submit_paypal {
   $self->authentication_key($rf->{'SecurityKey'});
 
   unless($self->is_success(
-    $rf->{'Status'} eq 'OK' ||
-    $rf->{'Status'} eq 'AUTHENTICATED' 
+    $rf->{'Status'} eq SAGEPAY_STATUS_OK ||
+    $rf->{'Status'} eq SAGEPAY_STATUS_AUTHENTICATED 
     ?  1 : 0)
   ) {
     my $code = substr $rf->{'StatusDetail'}, 0 ,4;
@@ -326,7 +352,7 @@ sub void_action { #void authorization
 
   $self->server_response($rf);
   $self->result_code($rf->{'Status'});
-  unless($self->is_success($rf->{'Status'} eq 'OK'? 1 : 0)) {
+  unless($self->is_success($rf->{'Status'} eq SAGEPAY_STATUS_OK ? 1 : 0)) {
     if($ENV{'SAGEPAY_DEBUG_ERROR_ONLY'}) {
       Dwarn $rf;
     }
@@ -379,7 +405,7 @@ sub cancel_action { #cancel authentication
 
   $self->server_response($rf);
   $self->result_code($rf->{'Status'});
-  unless($self->is_success($rf->{'Status'} eq 'OK'? 1 : 0)) {
+  unless($self->is_success($rf->{'Status'} eq SAGEPAY_STATUS_OK ? 1 : 0)) {
     if($ENV{'SAGEPAY_DEBUG_ERROR_ONLY'}) {
       Dwarn $rf;
     }
@@ -445,7 +471,7 @@ sub auth_action {
   $self->server_response($rf);
   $self->result_code($rf->{'Status'});
   $self->authorization($rf->{'VPSTxId'});
-  unless($self->is_success($rf->{'Status'} eq 'OK'? 1 : 0)) {
+  unless($self->is_success($rf->{'Status'} eq SAGEPAY_STATUS_OK ? 1 : 0)) {
     if($ENV{'SAGEPAY_DEBUG_ERROR_ONLY'}) {
       Dwarn $rf;
     }
@@ -459,22 +485,27 @@ sub auth_action {
 sub sanitised_content {
   my ($self,$content) = @_;
   my %content = $self->content();
-  $content{'expiration'} =~ s#/##g;
-  $content{'startdate'} =~ s#/##g if $content{'startdate'};
 
-  $content{'card_name'} = 
-       $content{'name_on_card'} 
-    || $content{'first_name'} . ' ' . ($content{'last_name'}||"");
-  $content{'customer_name'} = 
-       $content{'customer_name'}
-    || $content{'first_name'} ? 
-          $content{'first_name'} . ' ' . $content{'last_name'} : undef;
-  # new protocol requires first and last name - do some people even have both!?
-  $content{'last_name'} ||= $content{'first_name'}; 
-  $content{'action'} = $action{ lc $content{'action'} };
-  $content{'card_type'} = $card_type{lc $content{'type'}};
-  $content{'amount'} = format_amount($content{'amount'})
-    if $content{'amount'};
+  {
+    no warnings 'uninitialized';
+
+    $content{'expiration'} =~ s#/##g;
+    $content{'startdate'} =~ s#/##g if $content{'startdate'};
+
+    $content{'card_name'} = 
+        $content{'name_on_card'} 
+      || $content{'first_name'} . ' ' . ($content{'last_name'}||"");
+    $content{'customer_name'} = 
+        $content{'customer_name'}
+      || $content{'first_name'} ? 
+            $content{'first_name'} . ' ' . $content{'last_name'} : undef;
+    # new protocol requires first and last name - do some people even have both!?
+    $content{'last_name'} ||= $content{'first_name'}; 
+    $content{'action'} = $action{ lc $content{'action'} };
+    $content{'card_type'} = $card_type{lc $content{'type'}};
+    $content{'amount'} = format_amount($content{'amount'})
+      if $content{'amount'};
+  }
   
   return \%content;
 }
@@ -620,14 +651,17 @@ sub submit {
   $self->authorization($rf->{'VPSTxId'});
   $self->authentication_key($rf->{'SecurityKey'});
 
-  if($self->result_code eq '3DAUTH' && $rf->{'3DSecureStatus'} eq 'OK') {
+  if (
+    ($self->result_code eq SAGEPAY_STATUS_3DSECURE) && 
+    ($rf->{'3DSecureStatus'} eq SAGEPAY_STATUS_OK)
+  ) {
     $self->require_3d(1);
     $self->forward_to($rf->{'ACSURL'});
     $self->pareq($rf->{'PAReq'});
     $self->cross_reference($rf->{'MD'});
   }
 
-  if($self->result_code eq 'PPREDIRECT') {
+  if($self->result_code eq SAGEPAY_STATUS_PAYPAL_REDIRECT) {
     $self->require_paypal(1);
     $self->forward_to($rf->{'PayPalRedirectURL'});
   }
@@ -641,16 +675,18 @@ sub submit {
   }
 
   unless($self->is_success(
-    $rf->{'Status'} eq '3DAUTH' ||
-    $rf->{'Status'} eq 'PPREDIRECT' ||
-    $rf->{'Status'} eq 'OK' ||
-    $rf->{'Status'} eq 'AUTHENTICATED' ||
-    $rf->{'Status'} eq 'REGISTERED' 
+    $rf->{'Status'} eq SAGEPAY_STATUS_3DSECURE ||
+    $rf->{'Status'} eq SAGEPAY_STATUS_PAYPAL_REDIRECT ||
+    $rf->{'Status'} eq SAGEPAY_STATUS_OK ||
+    $rf->{'Status'} eq SAGEPAY_STATUS_AUTHENTICATED ||
+    $rf->{'Status'} eq SAGEPAY_STATUS_REGISTERED 
     ? 1 : 0)) {
       my $code = substr $rf->{'StatusDetail'}, 0 ,4;
+
       if($ENV{'SAGEPAY_DEBUG_ERROR_ONLY'}) {
         Dwarn $rf;
       }
+
       $self->error_code($code);
       $self->error_message($status->{$code} || $status->{UNKNOWN});
     }

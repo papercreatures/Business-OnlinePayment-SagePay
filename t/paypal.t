@@ -20,7 +20,7 @@ BEGIN {
         plan skip_all => 'SAGEPAY_VENDOR and/or SAGEPAY_SIMULATOR_PAYPAL environemnt variable not defined}';
     }
 
-    use_ok 'Business::OnlinePayment::SagePay';
+    use_ok('Business::OnlinePayment::SagePay', ':status');
 }
 
 my $tx = Business::OnlinePayment->new(
@@ -45,7 +45,7 @@ ok($tx->is_success, 'Transaction success');
 
 my $vps_id = $tx->authorization;
 
-is($tx->result_code, 'PPREDIRECT', 'PayPal redirect response');
+is($tx->result_code, SAGEPAY_STATUS_PAYPAL_REDIRECT, 'PayPal redirect response');
 
 SKIP: {
     eval 'use WWW::Mechanize; 1';
@@ -71,10 +71,8 @@ SKIP: {
 
     $tx->submit_paypal;
 
-    my $tx_response = $tx->server_response;
-
     ok($tx->is_success, 'PayPal transaction success');
-    is($tx_response->{'Status'}, 'OK', 'Payment status OK');
+    is($tx->result_code, SAGEPAY_STATUS_OK, 'Payment status OK');
 }
 
 done_testing();

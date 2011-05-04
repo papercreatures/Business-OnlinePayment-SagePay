@@ -19,7 +19,7 @@ BEGIN {
         plan skip_all => 'SAGEPAY_VENDOR environemnt variable not defined}';
     }
 
-    use_ok 'Business::OnlinePayment::SagePay';
+    use_ok('Business::OnlinePayment::SagePay', ':status');
 }
 
 my $tx = Business::OnlinePayment->new(
@@ -39,10 +39,10 @@ ok($tx->submit, 'Transaction submitted');
 ok($tx->is_success, 'Transaction success');
 
 SKIP: {
-    skip 'SAGEPAY_SIMULATOR_3DSEC environment variable not defined', 4
-        unless defined($ENV{SAGEPAY_SIMULATOR_3DSEC}); 
+    skip 'SAGEPAY_SIMULATOR_3DSECURE environment variable not defined', 4
+        unless defined($ENV{SAGEPAY_SIMULATOR_3DSECURE}); 
 
-    is($tx->result_code, '3DAUTH', '3DSecure response');
+    is($tx->result_code, SAGEPAY_STATUS_3DSECURE, '3DSecure response');
 
     SKIP: {
         eval 'use WWW::Mechanize; 1';
@@ -78,7 +78,7 @@ SKIP: {
         my $tx_response = $tx->server_response;
 
         ok($tx->is_success, '3D secure transaction success');
-        is($tx_response->{'3DSecureStatus'}, 'OK', '3D secure status OK');
+        is($tx_response->{'3DSecureStatus'}, SAGEPAY_STATUS_OK, '3D secure status OK');
     }
 }
 
