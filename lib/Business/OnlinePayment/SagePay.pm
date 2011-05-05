@@ -17,6 +17,7 @@ my %card_type = (
   'visa electron' => 'UKE',
   'visa debit' => 'DELTA',
   'mastercard' => 'MC',
+  'mastercard debit' => 'MC',
   'maestro' => 'MAESTRO',
   'international maestro' => 'MAESTRO',
   'switch' => 'MAESTRO',
