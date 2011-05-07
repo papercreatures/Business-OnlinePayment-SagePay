@@ -152,9 +152,10 @@ sub set_server {
 sub set_defaults {
   my $self = shift;
   $self->set_server('live');
-  $self->build_subs(
-    qw/protocol currency cvv2_response postcode_response address_response error_code require_3d 
-    forward_to invoice_number authentication_key authorization_code pareq cross_reference callback require_paypal/);
+  $self->build_subs(qw/
+    protocol currency cvv2_response postcode_response address_response error_code require_3d require_paypal
+    forward_to invoice_number authentication_key authorization_code pareq cross_reference callback encoded_3d_result
+  /);
   $self->protocol('2.23');
   $self->currency('GBP');
   $self->require_3d(0);
@@ -214,6 +215,7 @@ sub submit_3d {
   $self->authentication_key($rf->{'SecurityKey'});
   $self->authorization($rf->{'VPSTxId'});
   $self->authorization_code($rf->{'TxAuthNo'});
+  $self->encoded_3d_result($rf->{'CAVV'});
 
   unless(
     ($self->is_success($rf->{'Status'} eq SAGEPAY_STATUS_OK) || 
@@ -614,7 +616,7 @@ sub submit {
     ContactFax    => 'fax',
     CustomerEmail => 'email',
 
-    PayPalCallbackURL => 'paypal_callback_url',
+    PayPalCallbackURL => 'paypal_callback_uri',
   );
 
   my %post_data = $self->do_remap($content,%field_mapping);

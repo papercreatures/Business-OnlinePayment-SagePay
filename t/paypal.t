@@ -34,7 +34,7 @@ ok($tx, 'Transaction object');
 $tx->content( 
     create_transaction(),
     type => 'paypal',
-    paypal_callback_url => 'http://localhost',
+    paypal_callback_uri => 'http://localhost',
 );
 
 $tx->set_server('simulator');
