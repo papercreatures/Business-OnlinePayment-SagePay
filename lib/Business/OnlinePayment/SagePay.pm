@@ -96,7 +96,7 @@ my %servers = (
     cancel => '/gateway/service/cancel.vsp',
     token => '/gateway/service/directtoken.vsp',
     remove_token => '/gateway/service/removetoken.vsp',
-    complete => '/gateway/service/complete.asp',
+    complete => '/gateway/service/complete.vsp',
     port => 443,
   },
   test => {
@@ -108,7 +108,7 @@ my %servers = (
     cancel => '/gateway/service/cancel.vsp',
     token => '/gateway/service/directtoken.vsp',
     remove_token => '/gateway/service/removetoken.vsp',
-    complete => '/gateway/service/complete.asp',
+    complete => '/gateway/service/complete.vsp',
     port => 443,
   },
   simulator => {
@@ -120,7 +120,7 @@ my %servers = (
     cancel => '/Simulator/VSPServerGateway.asp?service=VendorCancelTx',
     token => '/Simulator/VSPServerGateway.asp?Service=VendorToken',
     remove_token => '/gateway/service/removetoken.vsp',
-    complete => '/Simulator/paypalcomplete.asp',
+    complete => '/Simulator/paypalcomplete.vsp',
     port => 443,
   },
   timeout => {
@@ -275,6 +275,9 @@ sub submit_paypal {
     $self->is_success(0);
     return;
   }
+warn $self->server;
+warn $self->path;
+warn $page;
 
   my $rf = $self->_parse_response($page);
 
@@ -286,6 +289,8 @@ sub submit_paypal {
   $self->server_response($rf);
   $self->result_code($rf->{'Status'});
   $self->authorization($rf->{'VPSTxId'});
+  $self->authentication_key($rf->{'SecurityKey'});
+  $self->authorization_code($rf->{'TxAuthNo'});
 
   unless($self->is_success(
     $rf->{'Status'} eq SAGEPAY_STATUS_OK ||
