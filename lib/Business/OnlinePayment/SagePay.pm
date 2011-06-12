@@ -755,6 +755,28 @@ Business::OnlinePayment::SagePay - SagePay backend for Business::OnlinePayment
 
 This perl module provides integration with the SagePay VSP payments system.
 
+=head1 CONSTANTS
+
+Constants for status are exported in set C<:status>:
+
+    use Business::OnlinePayment::SagePay qw(:status);
+
+=head1 PAYPAL
+
+If the card type is set to C<PAYPAL> then when submitted the transaction will use SagePay's PayPal integration (see
+L<http://www.sagepay.com/products_services/paypal>). The URI to redirect the customer to after the page at
+PayPal has been completed should be set in the C<paypal_callback_uri> atrribute in C<content>.
+
+If C<result_code eq SAGEPAY_STATUS_PAYPAL_REDIRECT> then user should be redirected to
+the uri provided in method C<forward_to>.
+
+=head1 METHODS
+
+=head2 submit_paypal
+
+This method submits a COMPLETE transaction to SagePay to complete a PayPal transaction. C<authentication_id>
+amd C<amount> should be set in C<content>.
+
 =head1 BUGS
 
 Please report any bugs or feature requests to C<bug-business-onlinepayment-sagepay at rt.cpan.org>, or through
