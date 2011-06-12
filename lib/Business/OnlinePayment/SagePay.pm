@@ -120,7 +120,7 @@ my %servers = (
     cancel => '/Simulator/VSPServerGateway.asp?service=VendorCancelTx',
     token => '/Simulator/VSPServerGateway.asp?Service=VendorToken',
     remove_token => '/gateway/service/removetoken.vsp',
-    complete => '/Simulator/paypalcomplete.vsp',
+    complete => '/Simulator/paypalcomplete.asp',
     port => 443,
   },
   timeout => {
@@ -275,9 +275,6 @@ sub submit_paypal {
     $self->is_success(0);
     return;
   }
-warn $self->server;
-warn $self->path;
-warn $page;
 
   my $rf = $self->_parse_response($page);
 
