@@ -21,20 +21,6 @@ use constant {
   SAGEPAY_STATUS_PAYPAL_REDIRECT  => 'PPREDIRECT',
 };
 
-our @STATUS = qw(
-  SAGEPAY_STATUS_OK
-  SAGEPAY_STATUS_AUTHENTICATED
-  SAGEPAY_STATUS_REGISTERED
-  SAGEPAY_STATUS_3DSECURE
-  SAGEPAY_STATUS_PAYPAL_REDIRECT
-);
-
-our @EXPORT_OK = (@STATUS);
-
-our %EXPORT_TAGS = (
-  status => \@STATUS,
-);
-
 # CARD TYPE MAP
 
 my %card_type = (
@@ -47,7 +33,7 @@ my %card_type = (
   'maestro' => 'MAESTRO',
   'international maestro' => 'MAESTRO',
   'switch' => 'MAESTRO',
-  'switch solo' => 'SOLO',
+'switch solo' => 'SOLO',
   'solo' => 'SOLO',
   'diners club' => 'DINERS',
   'jcb' => 'JCB',
@@ -755,12 +741,6 @@ Business::OnlinePayment::SagePay - SagePay backend for Business::OnlinePayment
 
 This perl module provides integration with the SagePay VSP payments system.
 
-=head1 CONSTANTS
-
-Constants for status are exported in set C<:status>:
-
-    use Business::OnlinePayment::SagePay qw(:status);
-
 =head1 PAYPAL
 
 If the card type is set to C<PAYPAL> then when submitted the transaction will use SagePay's PayPal integration (see
@@ -776,6 +756,15 @@ the uri provided in method C<forward_to>.
 
 This method submits a COMPLETE transaction to SagePay to complete a PayPal transaction. C<authentication_id>
 amd C<amount> should be set in C<content>.
+
+=head2 SAGEPAY_STATUS_PAYPAL_REDIRECT
+
+    if ($tx->status_code eq $tx->SAGEPAY_STATUS_PAYPAL_REDIRECT) {
+        # redirct to $tx->forward_to ...
+    }
+
+Status to check if transaction result_code requires a redirect to PayPal. Can be called as a class or
+object method for convenience.
 
 =head1 BUGS
 
