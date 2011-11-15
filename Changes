@@ -1,9 +1,7 @@
 Revision history for Perl extension Business::SagePay.
 
-0.14  2011-11-15
+0.13  2011-11-15
       - Paypal support. Many thanks to cubabit (Pete Smith)
-
-0.13  2010-10-25
       - refactor error messages
 
 0.12  Wed Feb 17 2010
