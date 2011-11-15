@@ -1,12 +1,25 @@
 package Business::OnlinePayment::SagePay;
-
+# vim: ts=2 sts=2 sw=2 :
+  
 use strict;
+use warnings;
+
+use base qw(Business::OnlinePayment);
+
 use Carp;
 use Net::SSLeay qw(make_form post_https);
-use base qw(Business::OnlinePayment);
 use Devel::Dwarn;
+use Exporter 'import';
 
 our $VERSION = '0.13';
+
+use constant {
+  SAGEPAY_STATUS_OK               => 'OK',
+  SAGEPAY_STATUS_AUTHENTICATED    => 'AUTHENTICATED',
+  SAGEPAY_STATUS_REGISTERED       => 'REGISTERED',
+  SAGEPAY_STATUS_3DSECURE         => '3DAUTH',
+  SAGEPAY_STATUS_PAYPAL_REDIRECT  => 'PPREDIRECT',
+};
 
 # CARD TYPE MAP
 
@@ -21,10 +34,11 @@ my %card_type = (
   'maestro' => 'MAESTRO',
   'international maestro' => 'MAESTRO',
   'switch' => 'MAESTRO',
-  'switch solo' => 'SOLO',
+'switch solo' => 'SOLO',
   'solo' => 'SOLO',
   'diners club' => 'DINERS',
   'jcb' => 'JCB',
+  'paypal' => 'PAYPAL',
 );
 
 my $status = {
@@ -70,6 +84,7 @@ my %servers = (
     cancel => '/gateway/service/cancel.vsp',
     token => '/gateway/service/directtoken.vsp',
     remove_token => '/gateway/service/removetoken.vsp',
+    complete => '/gateway/service/complete.vsp',
     port => 443,
   },
   test => {
@@ -81,6 +96,7 @@ my %servers = (
     cancel => '/gateway/service/cancel.vsp',
     token => '/gateway/service/directtoken.vsp',
     remove_token => '/gateway/service/removetoken.vsp',
+    complete => '/gateway/service/complete.vsp',
     port => 443,
   },
   simulator => {
@@ -92,6 +108,7 @@ my %servers = (
     cancel => '/Simulator/VSPServerGateway.asp?service=VendorCancelTx',
     token => '/Simulator/VSPServerGateway.asp?Service=VendorToken',
     remove_token => '/gateway/service/removetoken.vsp',
+    complete => '/Simulator/paypalcomplete.asp',
     port => 443,
   },
   timeout => {
@@ -123,12 +140,14 @@ sub set_server {
 sub set_defaults {
   my $self = shift;
   $self->set_server('live');
-  $self->build_subs(
-    qw/protocol currency cvv2_response postcode_response error_code require_3d 
-    forward_to invoice_number authentication_key pareq cross_reference callback/);
+  $self->build_subs(qw/
+    protocol currency cvv2_response postcode_response address_response error_code require_3d require_paypal
+    forward_to invoice_number authentication_key authorization_code pareq cross_reference callback encoded_3d_result
+  /);
   $self->protocol('2.23');
   $self->currency('GBP');
   $self->require_3d(0);
+  $self->require_paypal(0);
 }
 
 sub do_remap {
@@ -183,10 +202,12 @@ sub submit_3d {
   $self->result_code($rf->{'Status'});
   $self->authentication_key($rf->{'SecurityKey'});
   $self->authorization($rf->{'VPSTxId'});
+  $self->authorization_code($rf->{'TxAuthNo'});
+  $self->encoded_3d_result($rf->{'CAVV'});
 
   unless(
-    $self->is_success($rf->{'Status'} eq 'OK'
-    || $rf->{'Status'} eq 'AUTHENTICATED' 
+    ($self->is_success($rf->{'Status'} eq SAGEPAY_STATUS_OK) || 
+    ($rf->{'Status'} eq SAGEPAY_STATUS_AUTHENTICATED)
     ?  1 : 0)) {
     $self->error_message($status->{'3D_PASS'});
     if($ENV{'SAGEPAY_DEBUG_ERROR_ONLY'}) {
@@ -194,6 +215,85 @@ sub submit_3d {
     }
     return 0;
   } else{
+    return 1;
+  }
+}
+
+sub submit_paypal {
+  my $self = shift;
+
+  my $content = $self->sanitised_content;
+
+  my %field_mapping = (
+    VpsProtocol => \($self->protocol),
+    Vendor      => \($self->vendor),
+    VPSTxId     => 'authentication_id',
+    Amount      => 'amount',
+  );
+
+  my %post_data = (
+    $self->do_remap($content, %field_mapping),
+    TxType  => 'COMPLETE',
+    Accept  => 'YES',
+  );
+
+  if($ENV{'SAGEPAY_DEBUG'}) {
+    warn "PayPal complete Form:";
+    Dwarn {
+      %post_data, 
+    };
+  }
+
+  $self->set_server($ENV{'SAGEPAY_F_SIMULATOR'} ? 'simulator' : 'test') 
+    if $self->test_transaction;
+
+  $self->path( $servers{ $self->{'_server'} }->{'complete'} );
+
+  my ($page, $response, %headers) = 
+    post_https(
+      $self->server,
+      $self->port,
+      $self->path,
+      undef,
+      make_form(%post_data)
+    );
+
+  unless ($page) {
+    $self->error_message($status->{TIMEOUT});
+    $self->is_success(0);
+    return;
+  }
+
+  my $rf = $self->_parse_response($page);
+
+  if($ENV{'SAGEPAY_DEBUG'}) {
+    warn "PayPal:";
+    Dwarn $rf;
+  }
+
+  $self->server_response($rf);
+  $self->result_code($rf->{'Status'});
+  $self->authorization($rf->{'VPSTxId'});
+  $self->authentication_key($rf->{'SecurityKey'});
+  $self->authorization_code($rf->{'TxAuthNo'});
+
+  unless($self->is_success(
+    $rf->{'Status'} eq SAGEPAY_STATUS_OK ||
+    $rf->{'Status'} eq SAGEPAY_STATUS_AUTHENTICATED 
+    ?  1 : 0)
+  ) {
+    my $code = substr $rf->{'StatusDetail'}, 0 ,4;
+
+    if($ENV{'SAGEPAY_DEBUG_ERROR_ONLY'}) {
+      Dwarn $rf;
+    }
+
+    $self->error_code($code);
+    $self->error_message($status->{$code} || $status->{UNKNOWN});
+
+    return 0;
+  }
+  else {
     return 1;
   }
 }
@@ -244,7 +344,7 @@ sub void_action { #void authorization
 
   $self->server_response($rf);
   $self->result_code($rf->{'Status'});
-  unless($self->is_success($rf->{'Status'} eq 'OK'? 1 : 0)) {
+  unless($self->is_success($rf->{'Status'} eq SAGEPAY_STATUS_OK ? 1 : 0)) {
     if($ENV{'SAGEPAY_DEBUG_ERROR_ONLY'}) {
       Dwarn $rf;
     }
@@ -297,7 +397,7 @@ sub cancel_action { #cancel authentication
 
   $self->server_response($rf);
   $self->result_code($rf->{'Status'});
-  unless($self->is_success($rf->{'Status'} eq 'OK'? 1 : 0)) {
+  unless($self->is_success($rf->{'Status'} eq SAGEPAY_STATUS_OK ? 1 : 0)) {
     if($ENV{'SAGEPAY_DEBUG_ERROR_ONLY'}) {
       Dwarn $rf;
     }
@@ -363,7 +463,7 @@ sub auth_action {
   $self->server_response($rf);
   $self->result_code($rf->{'Status'});
   $self->authorization($rf->{'VPSTxId'});
-  unless($self->is_success($rf->{'Status'} eq 'OK'? 1 : 0)) {
+  unless($self->is_success($rf->{'Status'} eq SAGEPAY_STATUS_OK ? 1 : 0)) {
     if($ENV{'SAGEPAY_DEBUG_ERROR_ONLY'}) {
       Dwarn $rf;
     }
@@ -377,22 +477,27 @@ sub auth_action {
 sub sanitised_content {
   my ($self,$content) = @_;
   my %content = $self->content();
-  $content{'expiration'} =~ s#/##g;
-  $content{'startdate'} =~ s#/##g if $content{'startdate'};
 
-  $content{'card_name'} = 
-       $content{'name_on_card'} 
-    || $content{'first_name'} . ' ' . ($content{'last_name'}||"");
-  $content{'customer_name'} = 
-       $content{'customer_name'}
-    || $content{'first_name'} ? 
-          $content{'first_name'} . ' ' . $content{'last_name'} : undef;
-  # new protocol requires first and last name - do some people even have both!?
-  $content{'last_name'} ||= $content{'first_name'}; 
-  $content{'action'} = lc $content{'action'};
-  $content{'card_type'} = $card_type{lc $content{'type'}};
-  $content{'amount'} = format_amount($content{'amount'})
-    if $content{'amount'};
+  {
+    no warnings 'uninitialized';
+
+    $content{'expiration'} =~ s#/##g;
+    $content{'startdate'} =~ s#/##g if $content{'startdate'};
+
+    $content{'card_name'} = 
+        $content{'name_on_card'} 
+      || $content{'first_name'} . ' ' . ($content{'last_name'}||"");
+    $content{'customer_name'} = 
+        $content{'customer_name'}
+      || $content{'first_name'} ? 
+            $content{'first_name'} . ' ' . $content{'last_name'} : undef;
+    # new protocol requires first and last name - do some people even have both!?
+    $content{'last_name'} ||= $content{'first_name'}; 
+    $content{'action'} = $action{ lc $content{'action'} };
+    $content{'card_type'} = $card_type{lc $content{'type'}};
+    $content{'amount'} = format_amount($content{'amount'})
+      if $content{'amount'};
+  }
   
   return \%content;
 }
@@ -481,7 +586,7 @@ sub token_submit { #submit a payment with token
 sub submit {
   my $self = shift;
   $self->initialise;
-  my %content = $self->sanitised_content;
+  my $content = $self->sanitised_content;
   
   my %field_mapping = (
     VpsProtocol => \($self->protocol),
@@ -519,9 +624,11 @@ sub submit {
     ContactNumber   => 'telephone',
     ContactFax    => 'fax',
     CustomerEmail => 'email',
+
+    PayPalCallbackURL => 'paypal_callback_uri',
   );
 
-  my %post_data = $self->do_remap(\%content,%field_mapping);
+  my %post_data = $self->do_remap($content,%field_mapping);
 
   if($ENV{'SAGEPAY_DEBUG'}) {
     warn "Authentication Form:";
@@ -554,29 +661,45 @@ sub submit {
   $self->result_code($rf->{'Status'});
   $self->authorization($rf->{'VPSTxId'});
   $self->authentication_key($rf->{'SecurityKey'});
+  $self->authorization_code($rf->{'TxAuthNo'});
 
-  if($self->result_code eq '3DAUTH' && $rf->{'3DSecureStatus'} eq 'OK') {
+  if (
+    ($self->result_code eq SAGEPAY_STATUS_3DSECURE) && 
+    ($rf->{'3DSecureStatus'} eq SAGEPAY_STATUS_OK)
+  ) {
     $self->require_3d(1);
     $self->forward_to($rf->{'ACSURL'});
     $self->pareq($rf->{'PAReq'});
     $self->cross_reference($rf->{'MD'});
   }
+
+  if($self->result_code eq SAGEPAY_STATUS_PAYPAL_REDIRECT) {
+    $self->require_paypal(1);
+    $self->forward_to($rf->{'PayPalRedirectURL'});
+  }
+
   $self->cvv2_response($rf->{'CV2Result'});
   $self->postcode_response($rf->{'PostCodeResult'});
+  $self->address_response($rf->{'AddressResult'});
+
   if($ENV{'SAGEPAY_DEBUG'}) {
     warn "Authentication Response:";
     Dwarn $rf;
   }
+
   unless($self->is_success(
-    $rf->{'Status'} eq '3DAUTH' ||
-    $rf->{'Status'} eq 'OK' ||
-    $rf->{'Status'} eq 'AUTHENTICATED' ||
-    $rf->{'Status'} eq 'REGISTERED' 
+    $rf->{'Status'} eq SAGEPAY_STATUS_3DSECURE ||
+    $rf->{'Status'} eq SAGEPAY_STATUS_PAYPAL_REDIRECT ||
+    $rf->{'Status'} eq SAGEPAY_STATUS_OK ||
+    $rf->{'Status'} eq SAGEPAY_STATUS_AUTHENTICATED ||
+    $rf->{'Status'} eq SAGEPAY_STATUS_REGISTERED 
     ? 1 : 0)) {
       my $code = substr $rf->{'StatusDetail'}, 0 ,4;
+
       if($ENV{'SAGEPAY_DEBUG_ERROR_ONLY'}) {
         Dwarn $rf;
       }
+
       $self->error_code($code);
       $self->error_message($status->{$code} || $status->{UNKNOWN});
     }
@@ -638,6 +761,31 @@ Business::OnlinePayment::SagePay - SagePay backend for Business::OnlinePayment
 =head1 DESCRIPTION
 
 This perl module provides integration with the SagePay VSP payments system.
+
+=head1 PAYPAL
+
+If the card type is set to C<PAYPAL> then when submitted the transaction will use SagePay's PayPal integration (see
+L<http://www.sagepay.com/products_services/paypal>). The URI to redirect the customer to after the page at
+PayPal has been completed should be set in the C<paypal_callback_uri> atrribute in C<content>.
+
+If C<result_code eq SAGEPAY_STATUS_PAYPAL_REDIRECT> then user should be redirected to
+the uri provided in method C<forward_to>.
+
+=head1 METHODS
+
+=head2 submit_paypal
+
+This method submits a COMPLETE transaction to SagePay to complete a PayPal transaction. C<authentication_id>
+amd C<amount> should be set in C<content>.
+
+=head2 SAGEPAY_STATUS_PAYPAL_REDIRECT
+
+    if ($tx->status_code eq $tx->SAGEPAY_STATUS_PAYPAL_REDIRECT) {
+        # redirct to $tx->forward_to ...
+    }
+
+Status to check if transaction result_code requires a redirect to PayPal. Can be called as a class or
+object method for convenience.
 
 =head1 BUGS
 
