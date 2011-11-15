@@ -83,6 +83,8 @@ my %servers = (
     refund => '/gateway/service/refund.vsp',
     cancel => '/gateway/service/cancel.vsp',
     complete => '/gateway/service/complete.vsp',
+    token => '/gateway/service/directtoken.vsp',
+    remove_token => '/gateway/service/removetoken.vsp',
     port => 443,
   },
   test => {
@@ -93,6 +95,8 @@ my %servers = (
     refund => '/gateway/service/refund.vsp',
     cancel => '/gateway/service/cancel.vsp',
     complete => '/gateway/service/complete.vsp',
+    token => '/gateway/service/directtoken.vsp',
+    remove_token => '/gateway/service/removetoken.vsp',
     port => 443,
   },
   simulator => {
@@ -103,6 +107,8 @@ my %servers = (
     refund => '/Simulator/VSPServerGateway.asp?service=VendorRefundTx ',
     cancel => '/Simulator/VSPServerGateway.asp?service=VendorCancelTx',
     complete => '/Simulator/paypalcomplete.asp',
+    token => '/Simulator/VSPServerGateway.asp?Service=VendorToken',
+    remove_token => '/gateway/service/removetoken.vsp',
     port => 443,
   },
   timeout => {
@@ -344,6 +350,54 @@ sub void_action { #void authorization
     }
     $self->error_message($rf->{'StatusDetail'});
   }  
+}
+
+sub token_action { #get token from card details
+  my $self = shift;
+  $self->initialise;
+  my %field_mapping = (
+    VpsProtocol => \($self->protocol),
+    Vendor      => \($self->vendor),
+    TxType      => \('TOKEN'),
+    CardHolder  => 'card_name',
+    CardNumber  => 'card_number',
+    StartDate => 'startdate',
+    ExpiryDate  => 'expiration',
+    IssueNumber => 'issue_number',
+    CV2         => 'cvv2',
+    CardType  => 'card_type',
+    Currency    => \($self->currency),
+  );
+  $self->post_request('token',{
+    $self->do_remap(
+      $self->sanitised_content,
+      %field_mapping
+    )
+  });
+}
+
+sub token_submit { #submit a payment with token
+  my $self = shift;
+  $self->initialise;
+  my %field_mapping = (
+    VpsProtocol => \($self->protocol),
+    Vendor      => \($self->vendor),
+    TxType      => \('PAYMENT'),
+    CardHolder  => 'card_name',
+    CardNumber  => 'card_number',
+    StartDate => 'startdate',
+    ExpiryDate  => 'expiration',
+    IssueNumber => 'issue_number',
+    CV2         => 'cvv2',
+    CardType  => 'card_type',
+    Currency    => \($self->currency),
+  );
+  $self->post_request('token',{
+    $self->do_remap(
+      $self->sanitised_content,
+      %field_mapping
+    )
+  });  
 }
 
 sub cancel_action { #cancel authentication
