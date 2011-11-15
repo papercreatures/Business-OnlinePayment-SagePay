@@ -82,8 +82,6 @@ my %servers = (
     authorise => '/gateway/service/authorise.vsp',
     refund => '/gateway/service/refund.vsp',
     cancel => '/gateway/service/cancel.vsp',
-    token => '/gateway/service/directtoken.vsp',
-    remove_token => '/gateway/service/removetoken.vsp',
     complete => '/gateway/service/complete.vsp',
     port => 443,
   },
@@ -94,8 +92,6 @@ my %servers = (
     authorise => '/gateway/service/authorise.vsp',
     refund => '/gateway/service/refund.vsp',
     cancel => '/gateway/service/cancel.vsp',
-    token => '/gateway/service/directtoken.vsp',
-    remove_token => '/gateway/service/removetoken.vsp',
     complete => '/gateway/service/complete.vsp',
     port => 443,
   },
@@ -106,8 +102,6 @@ my %servers = (
     authorise => '/Simulator/VSPServerGateway.asp?service=VendorAuthoriseTx ',
     refund => '/Simulator/VSPServerGateway.asp?service=VendorRefundTx ',
     cancel => '/Simulator/VSPServerGateway.asp?service=VendorCancelTx',
-    token => '/Simulator/VSPServerGateway.asp?Service=VendorToken',
-    remove_token => '/gateway/service/removetoken.vsp',
     complete => '/Simulator/paypalcomplete.asp',
     port => 443,
   },
@@ -534,55 +528,6 @@ sub post_request {
   $self->authentication_key($rf->{'SecurityKey'});
 }
 
-sub token_action { #get token from card details
-  my $self = shift;
-  $self->initialise;
-  my %field_mapping = (
-    VpsProtocol => \($self->protocol),
-    Vendor      => \($self->vendor),
-    TxType      => \('TOKEN'),
-    CardHolder  => 'card_name',
-    CardNumber  => 'card_number',
-    StartDate => 'startdate',
-    ExpiryDate  => 'expiration',
-    IssueNumber => 'issue_number',
-    CV2         => 'cvv2',
-    CardType  => 'card_type',
-    Currency    => \($self->currency),
-  );
-  $self->post_request('token',{
-    $self->do_remap(
-      $self->sanitised_content,
-      %field_mapping
-    )
-  });
-}
-
-sub token_submit { #submit a payment with token
-  my $self = shift;
-  $self->initialise;
-  my %field_mapping = (
-    VpsProtocol => \($self->protocol),
-    Vendor      => \($self->vendor),
-    TxType      => \('PAYMENT'),
-    CardHolder  => 'card_name',
-    CardNumber  => 'card_number',
-    StartDate => 'startdate',
-    ExpiryDate  => 'expiration',
-    IssueNumber => 'issue_number',
-    CV2         => 'cvv2',
-    CardType  => 'card_type',
-    Currency    => \($self->currency),
-  );
-  $self->post_request('token',{
-    $self->do_remap(
-      $self->sanitised_content,
-      %field_mapping
-    )
-  });
-  
-}
-
 sub submit {
   my $self = shift;
   $self->initialise;
@@ -827,6 +772,8 @@ L<Business::OnlinePayment>
 =head1 AUTHOR
 
   purge: Simon Elliott <cpan@browsing.co.uk>
+  
+  cubabit: Pete Smith
 
 =head1 ACKNOWLEDGEMENTS
 

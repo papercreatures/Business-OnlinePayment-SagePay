@@ -2,7 +2,6 @@ Revision history for Perl extension Business::SagePay.
 
 0.13  2010-10-25
       - refactor error messages
-      - support sagepay token system
 
 0.12  Wed Feb 17 2010
       - support 'international maestro' as card type (handled as maestro).
