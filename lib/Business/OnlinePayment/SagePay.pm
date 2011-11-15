@@ -11,8 +11,6 @@ use Net::SSLeay qw(make_form post_https);
 use Devel::Dwarn;
 use Exporter 'import';
 
-our $VERSION = '0.13';
-
 use constant {
   SAGEPAY_STATUS_OK               => 'OK',
   SAGEPAY_STATUS_AUTHENTICATED    => 'AUTHENTICATED',
