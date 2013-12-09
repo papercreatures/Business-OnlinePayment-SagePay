@@ -80,6 +80,7 @@ my %servers = (
     refund    => '/gateway/service/refund.vsp',
     cancel    => '/gateway/service/cancel.vsp',
     complete  => '/gateway/service/complete.vsp',
+    void      => '/gateway/service/void.vsp',
     port      => 443,
   },
   test => {
@@ -90,6 +91,7 @@ my %servers = (
     refund    => '/gateway/service/refund.vsp',
     cancel    => '/gateway/service/cancel.vsp',
     complete  => '/gateway/service/complete.vsp',
+    void      => '/gateway/service/void.vsp',
     port      => 443,
   },
   simulator => {
@@ -99,6 +101,7 @@ my %servers = (
     authorise => '/Simulator/VSPServerGateway.asp?service=VendorAuthoriseTx ',
     refund    => '/Simulator/VSPServerGateway.asp?service=VendorRefundTx ',
     cancel    => '/Simulator/VSPServerGateway.asp?service=VendorCancelTx',
+    void      => '/Simulator/VSPServerGateway.asp?service=VendorVoidTx',
     complete  => '/Simulator/paypalcomplete.asp',
     port      => 443,
   },
@@ -109,6 +112,7 @@ my %servers = (
     authorise => '/Simulator/VSPServerGateway.asp?service=VendorAuthoriseTx ',
     refund    => '/Simulator/VSPServerGateway.asp?service=VendorRefundTx ',
     cancel    => '/Simulator/VSPServerGateway.asp?service=VendorCancelTx',
+    void      => '/Simulator/VSPServerGateway.asp?service=VendorVoidTx',
     port      => 3000,
   }
 );
@@ -300,7 +304,7 @@ sub void_action { #void authorization
     VendorTxCode  => 'invoice_number',
     VPSTxId       => 'authentication_id',
     SecurityKey   => 'authentication_key',
-    TxAuthNo      => ''
+    TxAuthNo      => 'authentication_number'
   );
   my %post_data = $self->do_remap(\%content,%field_mapping);
   $post_data{'TxType'} = 'VOID';
@@ -309,7 +313,7 @@ sub void_action { #void authorization
     Dwarn %post_data;
   }
 
-  $self->path($servers{$self->{'_server'}}->{'cancel'});
+  $self->path($servers{$self->{'_server'}}->{'void'});
   my ($page, $response, %headers) =
     post_https(
       $self->server,
