@@ -1,6 +1,6 @@
 package Business::OnlinePayment::SagePay;
 # vim: ts=2 sts=2 sw=2 :
-  
+
 use strict;
 use warnings;
 
@@ -147,7 +147,7 @@ sub do_remap {
   my %remapped = ();
   while (my ($k, $v) = each %map) {
     no strict 'refs';
-    $remapped{$k} = ref( $map{$k} ) ? 
+    $remapped{$k} = ref( $map{$k} ) ?
       ${ $map{$k} }
       :
       $content->{$v};
@@ -168,9 +168,9 @@ sub submit_3d {
     MD    => $content{'cross_reference'},
     PaRes => $content{'pares'},
   );
-  $self->set_server($ENV{'SAGEPAY_F_SIMULATOR'} ? 'simulator' : 'test') 
+  $self->set_server($ENV{'SAGEPAY_F_SIMULATOR'} ? 'simulator' : 'test')
     if $self->test_transaction;
-  my ($page, $response, %headers) = 
+  my ($page, $response, %headers) =
     post_https(
       $self->server,
       $self->port,
@@ -198,7 +198,7 @@ sub submit_3d {
   $self->encoded_3d_result($rf->{'CAVV'});
 
   unless(
-    ($self->is_success($rf->{'Status'} eq SAGEPAY_STATUS_OK) || 
+    ($self->is_success($rf->{'Status'} eq SAGEPAY_STATUS_OK) ||
     ($rf->{'Status'} eq SAGEPAY_STATUS_AUTHENTICATED)
     ?  1 : 0)) {
     $self->error_message($status->{'3D_PASS'});
@@ -232,16 +232,16 @@ sub submit_paypal {
   if($ENV{'SAGEPAY_DEBUG'}) {
     warn "PayPal complete Form:";
     Dwarn {
-      %post_data, 
+      %post_data,
     };
   }
 
-  $self->set_server($ENV{'SAGEPAY_F_SIMULATOR'} ? 'simulator' : 'test') 
+  $self->set_server($ENV{'SAGEPAY_F_SIMULATOR'} ? 'simulator' : 'test')
     if $self->test_transaction;
 
   $self->path( $servers{ $self->{'_server'} }->{'complete'} );
 
-  my ($page, $response, %headers) = 
+  my ($page, $response, %headers) =
     post_https(
       $self->server,
       $self->port,
@@ -271,7 +271,7 @@ sub submit_paypal {
 
   unless($self->is_success(
     $rf->{'Status'} eq SAGEPAY_STATUS_OK ||
-    $rf->{'Status'} eq SAGEPAY_STATUS_AUTHENTICATED 
+    $rf->{'Status'} eq SAGEPAY_STATUS_AUTHENTICATED
     ?  1 : 0)
   ) {
     my $code = substr $rf->{'StatusDetail'}, 0 ,4;
@@ -311,7 +311,7 @@ sub void_action { #void authorization
   }
 
   $self->path($servers{$self->{'_server'}}->{'cancel'});
-  my ($page, $response, %headers) = 
+  my ($page, $response, %headers) =
     post_https(
       $self->server,
       $self->port,
@@ -341,7 +341,7 @@ sub void_action { #void authorization
       Dwarn $rf;
     }
     $self->error_message($rf->{'StatusDetail'});
-  }  
+  }
 }
 
 sub cancel_action { #cancel authentication
@@ -364,7 +364,7 @@ sub cancel_action { #cancel authentication
   }
 
   $self->path($servers{$self->{'_server'}}->{'cancel'});
-  my ($page, $response, %headers) = 
+  my ($page, $response, %headers) =
     post_https(
       $self->server,
       $self->port,
@@ -394,21 +394,21 @@ sub cancel_action { #cancel authentication
       Dwarn $rf;
     }
     $self->error_message($rf->{'StatusDetail'});
-  }  
+  }
 }
 
 sub initialise {
   my $self = shift;
   croak "Need vendor ID"
     unless defined $self->vendor;
-  $self->set_server($ENV{'SAGEPAY_F_SIMULATOR'} ? 'simulator' : 'test') 
+  $self->set_server($ENV{'SAGEPAY_F_SIMULATOR'} ? 'simulator' : 'test')
     if $self->test_transaction;
 }
 
-sub auth_action { 
+sub auth_action {
   my ($self, $action) = @_;
   $self->initialise;
-  
+
   my %content = $self->content();
   my %field_mapping = (
     VpsProtocol => \($self->protocol),
@@ -429,7 +429,7 @@ sub auth_action {
   }
 
   $self->path($servers{$self->{'_server'}}->{lc $post_data{'TxType'}});
-  my ($page, $response, %headers) = 
+  my ($page, $response, %headers) =
     post_https(
       $self->server,
       $self->port,
@@ -476,35 +476,35 @@ sub sanitised_content {
     $content{'expiration'} =~ s#/##g;
     $content{'startdate'} =~ s#/##g if $content{'startdate'};
 
-    $content{'card_name'} = 
-        $content{'name_on_card'} 
+    $content{'card_name'} =
+        $content{'name_on_card'}
       || $content{'first_name'} . ' ' . ($content{'last_name'}||"");
-    $content{'customer_name'} = 
+    $content{'customer_name'} =
         $content{'customer_name'}
-      || $content{'first_name'} ? 
+      || $content{'first_name'} ?
             $content{'first_name'} . ' ' . $content{'last_name'} : undef;
     # new protocol requires first and last name - do some people even have both!?
-    $content{'last_name'} ||= $content{'first_name'}; 
+    $content{'last_name'} ||= $content{'first_name'};
     $content{'action'} = $action{ lc $content{'action'} };
     $content{'card_type'} = $card_type{lc $content{'type'}};
     $content{'amount'} = format_amount($content{'amount'})
       if $content{'amount'};
   }
-  
+
   return \%content;
 }
 
 sub post_request {
   my ($self,$type,$data) = @_;
-  
+
   $self->path($servers{$self->{'_server'}}->{$type});
-  
+
   if($ENV{'SAGEPAY_DEBUG'}) {
     warn sprintf("Posting to %s:%s%s",
       $self->server, $self->port, $self->path);
     Dwarn $data;
   }
-  
+
   my ($page, $response, %headers) = post_https(
     $self->server,
     $self->port,
@@ -512,7 +512,7 @@ sub post_request {
     undef,
     make_form( %$data )
   );
-  
+
   unless ($page) {
     $self->error_message($status->{TIMEOUT});
     $self->is_success(0);
@@ -530,7 +530,7 @@ sub submit {
   my $self = shift;
   $self->initialise;
   my $content = $self->sanitised_content;
-  
+
   my %field_mapping = (
     VpsProtocol => \($self->protocol),
     Vendor      => \($self->vendor),
@@ -576,13 +576,13 @@ sub submit {
   if($ENV{'SAGEPAY_DEBUG'}) {
     warn "Authentication Form:";
     Dwarn {
-      %post_data, 
-      CV2 => "XXX", 
+      %post_data,
+      CV2 => "XXX",
       CardNumber => "XXXX XXXX XXXX XXXX"
     };
   }
 
-  $self->path($servers{$self->{'_server'}}->{'authorise'}) 
+  $self->path($servers{$self->{'_server'}}->{'authorise'})
     if $post_data{'TxType'} eq 'AUTHORISE';
   my ($page, $response, %headers) = post_https(
     $self->server,
@@ -607,7 +607,7 @@ sub submit {
   $self->authorization_code($rf->{'TxAuthNo'});
 
   if (
-    ($self->result_code eq SAGEPAY_STATUS_3DSECURE) && 
+    ($self->result_code eq SAGEPAY_STATUS_3DSECURE) &&
     ($rf->{'3DSecureStatus'} eq SAGEPAY_STATUS_OK)
   ) {
     $self->require_3d(1);
@@ -635,7 +635,7 @@ sub submit {
     $rf->{'Status'} eq SAGEPAY_STATUS_PAYPAL_REDIRECT ||
     $rf->{'Status'} eq SAGEPAY_STATUS_OK ||
     $rf->{'Status'} eq SAGEPAY_STATUS_AUTHENTICATED ||
-    $rf->{'Status'} eq SAGEPAY_STATUS_REGISTERED 
+    $rf->{'Status'} eq SAGEPAY_STATUS_REGISTERED
     ? 1 : 0)) {
       my $code = substr $rf->{'StatusDetail'}, 0 ,4;
 
@@ -770,7 +770,7 @@ L<Business::OnlinePayment>
 =head1 AUTHOR
 
   purge: Simon Elliott <cpan@browsing.co.uk>
-  
+
   cubabit: Pete Smith
 
 =head1 ACKNOWLEDGEMENTS
