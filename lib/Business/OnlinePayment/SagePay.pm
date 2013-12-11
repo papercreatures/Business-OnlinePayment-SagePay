@@ -429,7 +429,7 @@ sub auth_action {
   my %post_data = $self->do_remap(\%content,%field_mapping);
 
   if($ENV{'SAGEPAY_DEBUG'}) {
-    Dwarn %post_data;
+    Dwarn {%post_data};
   }
 
   $self->path($servers{$self->{'_server'}}->{lc $post_data{'TxType'}});
