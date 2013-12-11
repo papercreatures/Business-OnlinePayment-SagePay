@@ -424,6 +424,7 @@ sub auth_action {
     RelatedVPSTxId => 'parent_auth',
     RelatedVendorTxCode => 'parent_invoice_number',
     RelatedSecurityKey => 'authentication_key',
+    RelatedTxAuthNo => 'authentication_number'
   );
   my %post_data = $self->do_remap(\%content,%field_mapping);
 
