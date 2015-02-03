@@ -1,5 +1,10 @@
 Revision history for Perl extension Business::SagePay.
 
+0.14  2013-12-17
+      - Fixed void_action.
+      - Added missing RelatedTxAuthNo for auth_action refunds.
+      - Added REPEAT payment action.
+
 0.13  2011-11-15
       - Paypal support. Many thanks to cubabit (Pete Smith)
       - refactor error messages

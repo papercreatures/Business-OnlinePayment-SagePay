@@ -1,6 +1,6 @@
 package Business::OnlinePayment::SagePay;
 # vim: ts=2 sts=2 sw=2 :
-  
+
 use strict;
 use warnings;
 
@@ -12,31 +12,30 @@ use Devel::Dwarn;
 use Exporter 'import';
 
 use constant {
-  SAGEPAY_STATUS_OK               => 'OK',
-  SAGEPAY_STATUS_AUTHENTICATED    => 'AUTHENTICATED',
-  SAGEPAY_STATUS_REGISTERED       => 'REGISTERED',
-  SAGEPAY_STATUS_3DSECURE         => '3DAUTH',
-  SAGEPAY_STATUS_PAYPAL_REDIRECT  => 'PPREDIRECT',
+  SAGEPAY_STATUS_OK              => 'OK',
+  SAGEPAY_STATUS_AUTHENTICATED   => 'AUTHENTICATED',
+  SAGEPAY_STATUS_REGISTERED      => 'REGISTERED',
+  SAGEPAY_STATUS_3DSECURE        => '3DAUTH',
+  SAGEPAY_STATUS_PAYPAL_REDIRECT => 'PPREDIRECT',
 };
 
 # CARD TYPE MAP
-
 my %card_type = (
-  'american express' => 'AMEX',
-  'amex' => 'AMEX',
-  'visa' => 'VISA',
-  'visa electron' => 'UKE',
-  'visa debit' => 'DELTA',
-  'mastercard' => 'MC',
-  'mastercard debit' => 'MC',
-  'maestro' => 'MAESTRO',
+  'american express'      => 'AMEX',
+  'amex'                  => 'AMEX',
+  'visa'                  => 'VISA',
+  'visa electron'         => 'UKE',
+  'visa debit'            => 'DELTA',
+  'mastercard'            => 'MC',
+  'mastercard debit'      => 'MC',
+  'maestro'               => 'MAESTRO',
   'international maestro' => 'MAESTRO',
-  'switch' => 'MAESTRO',
-'switch solo' => 'SOLO',
-  'solo' => 'SOLO',
-  'diners club' => 'DINERS',
-  'jcb' => 'JCB',
-  'paypal' => 'PAYPAL',
+  'switch'                => 'MAESTRO',
+  'switch solo'           => 'SOLO',
+  'solo'                  => 'SOLO',
+  'diners club'           => 'DINERS',
+  'jcb'                   => 'JCB',
+  'paypal'                => 'PAYPAL',
 );
 
 my $status = {
@@ -70,47 +69,56 @@ my %action = (
   'authorization only'   => 'AUTHENTICATE',
   'post authorization'   => 'AUTHORISE',
   'refund'               => 'REFUND',
+  'repeat'               => 'REPEAT',
 );
 
 my %servers = (
   live => {
-    url => 'live.sagepay.com',
-    path => '/gateway/service/vspdirect-register.vsp',
-    callback => '/gateway/service/direct3dcallback.vsp',
+    url       => 'live.sagepay.com',
+    path      => '/gateway/service/vspdirect-register.vsp',
+    callback  => '/gateway/service/direct3dcallback.vsp',
     authorise => '/gateway/service/authorise.vsp',
-    refund => '/gateway/service/refund.vsp',
-    cancel => '/gateway/service/cancel.vsp',
-    complete => '/gateway/service/complete.vsp',
-    port => 443,
+    refund    => '/gateway/service/refund.vsp',
+    repeat    => '/gateway/service/repeat.vsp',
+    cancel    => '/gateway/service/cancel.vsp',
+    complete  => '/gateway/service/complete.vsp',
+    void      => '/gateway/service/void.vsp',
+    port      => 443,
   },
   test => {
-    url  => 'test.sagepay.com',
-    path => '/gateway/service/vspdirect-register.vsp',
-    callback => '/gateway/service/direct3dcallback.vsp',
+    url       => 'test.sagepay.com',
+    path      => '/gateway/service/vspdirect-register.vsp',
+    callback  => '/gateway/service/direct3dcallback.vsp',
     authorise => '/gateway/service/authorise.vsp',
-    refund => '/gateway/service/refund.vsp',
-    cancel => '/gateway/service/cancel.vsp',
-    complete => '/gateway/service/complete.vsp',
-    port => 443,
+    refund    => '/gateway/service/refund.vsp',
+    repeat    => '/gateway/service/repeat.vsp',
+    cancel    => '/gateway/service/cancel.vsp',
+    complete  => '/gateway/service/complete.vsp',
+    void      => '/gateway/service/void.vsp',
+    port      => 443,
   },
   simulator => {
-    url => 'test.sagepay.com',
-    path => '/Simulator/VSPDirectGateway.asp',
-    callback => '/Simulator/VSPDirectCallback.asp',
-    authorise => '/Simulator/VSPServerGateway.asp?service=VendorAuthoriseTx ',
-    refund => '/Simulator/VSPServerGateway.asp?service=VendorRefundTx ',
-    cancel => '/Simulator/VSPServerGateway.asp?service=VendorCancelTx',
-    complete => '/Simulator/paypalcomplete.asp',
-    port => 443,
+    url       => 'test.sagepay.com',
+    path      => '/Simulator/VSPDirectGateway.asp',
+    callback  => '/Simulator/VSPDirectCallback.asp',
+    authorise => '/Simulator/VSPServerGateway.asp?service=VendorAuthoriseTx',
+    refund    => '/Simulator/VSPServerGateway.asp?service=VendorRefundTx',
+    repeat    => '/Simulator/VSPServerGateway.asp?service=VendorRepeatTx',
+    cancel    => '/Simulator/VSPServerGateway.asp?service=VendorCancelTx',
+    void      => '/Simulator/VSPServerGateway.asp?service=VendorVoidTx',
+    complete  => '/Simulator/paypalcomplete.asp',
+    port      => 443,
   },
   timeout => {
-    url => 'localhost',
-    path => '/timeout',
-    callback => '/Simulator/VSPDirectCallback.asp',
-    authorise => '/Simulator/VSPServerGateway.asp?service=VendorAuthoriseTx ',
-    refund => '/Simulator/VSPServerGateway.asp?service=VendorRefundTx ',
-    cancel => '/Simulator/VSPServerGateway.asp?service=VendorCancelTx',
-    port => 3000,
+    url       => 'localhost',
+    path      => '/timeout',
+    callback  => '/Simulator/VSPDirectCallback.asp',
+    authorise => '/Simulator/VSPServerGateway.asp?service=VendorAuthoriseTx',
+    refund    => '/Simulator/VSPServerGateway.asp?service=VendorRefundTx',
+    repeat    => '/Simulator/VSPServerGateway.asp?service=VendorRepeatTx',
+    cancel    => '/Simulator/VSPServerGateway.asp?service=VendorCancelTx',
+    void      => '/Simulator/VSPServerGateway.asp?service=VendorVoidTx',
+    port      => 3000,
   }
 );
 
@@ -147,7 +155,7 @@ sub do_remap {
   my %remapped = ();
   while (my ($k, $v) = each %map) {
     no strict 'refs';
-    $remapped{$k} = ref( $map{$k} ) ? 
+    $remapped{$k} = ref( $map{$k} ) ?
       ${ $map{$k} }
       :
       $content->{$v};
@@ -168,9 +176,9 @@ sub submit_3d {
     MD    => $content{'cross_reference'},
     PaRes => $content{'pares'},
   );
-  $self->set_server($ENV{'SAGEPAY_F_SIMULATOR'} ? 'simulator' : 'test') 
+  $self->set_server($ENV{'SAGEPAY_F_SIMULATOR'} ? 'simulator' : 'test')
     if $self->test_transaction;
-  my ($page, $response, %headers) = 
+  my ($page, $response, %headers) =
     post_https(
       $self->server,
       $self->port,
@@ -198,7 +206,7 @@ sub submit_3d {
   $self->encoded_3d_result($rf->{'CAVV'});
 
   unless(
-    ($self->is_success($rf->{'Status'} eq SAGEPAY_STATUS_OK) || 
+    ($self->is_success($rf->{'Status'} eq SAGEPAY_STATUS_OK) ||
     ($rf->{'Status'} eq SAGEPAY_STATUS_AUTHENTICATED)
     ?  1 : 0)) {
     $self->error_message($status->{'3D_PASS'});
@@ -232,16 +240,16 @@ sub submit_paypal {
   if($ENV{'SAGEPAY_DEBUG'}) {
     warn "PayPal complete Form:";
     Dwarn {
-      %post_data, 
+      %post_data,
     };
   }
 
-  $self->set_server($ENV{'SAGEPAY_F_SIMULATOR'} ? 'simulator' : 'test') 
+  $self->set_server($ENV{'SAGEPAY_F_SIMULATOR'} ? 'simulator' : 'test')
     if $self->test_transaction;
 
   $self->path( $servers{ $self->{'_server'} }->{'complete'} );
 
-  my ($page, $response, %headers) = 
+  my ($page, $response, %headers) =
     post_https(
       $self->server,
       $self->port,
@@ -271,7 +279,7 @@ sub submit_paypal {
 
   unless($self->is_success(
     $rf->{'Status'} eq SAGEPAY_STATUS_OK ||
-    $rf->{'Status'} eq SAGEPAY_STATUS_AUTHENTICATED 
+    $rf->{'Status'} eq SAGEPAY_STATUS_AUTHENTICATED
     ?  1 : 0)
   ) {
     my $code = substr $rf->{'StatusDetail'}, 0 ,4;
@@ -301,7 +309,7 @@ sub void_action { #void authorization
     VendorTxCode  => 'invoice_number',
     VPSTxId       => 'authentication_id',
     SecurityKey   => 'authentication_key',
-    TxAuthNo      => ''
+    TxAuthNo      => 'authentication_number'
   );
   my %post_data = $self->do_remap(\%content,%field_mapping);
   $post_data{'TxType'} = 'VOID';
@@ -310,8 +318,8 @@ sub void_action { #void authorization
     Dwarn %post_data;
   }
 
-  $self->path($servers{$self->{'_server'}}->{'cancel'});
-  my ($page, $response, %headers) = 
+  $self->path($servers{$self->{'_server'}}->{'void'});
+  my ($page, $response, %headers) =
     post_https(
       $self->server,
       $self->port,
@@ -341,7 +349,7 @@ sub void_action { #void authorization
       Dwarn $rf;
     }
     $self->error_message($rf->{'StatusDetail'});
-  }  
+  }
 }
 
 sub cancel_action { #cancel authentication
@@ -364,7 +372,7 @@ sub cancel_action { #cancel authentication
   }
 
   $self->path($servers{$self->{'_server'}}->{'cancel'});
-  my ($page, $response, %headers) = 
+  my ($page, $response, %headers) =
     post_https(
       $self->server,
       $self->port,
@@ -394,21 +402,21 @@ sub cancel_action { #cancel authentication
       Dwarn $rf;
     }
     $self->error_message($rf->{'StatusDetail'});
-  }  
+  }
 }
 
 sub initialise {
   my $self = shift;
   croak "Need vendor ID"
     unless defined $self->vendor;
-  $self->set_server($ENV{'SAGEPAY_F_SIMULATOR'} ? 'simulator' : 'test') 
+  $self->set_server($ENV{'SAGEPAY_F_SIMULATOR'} ? 'simulator' : 'test')
     if $self->test_transaction;
 }
 
-sub auth_action { 
+sub auth_action {
   my ($self, $action) = @_;
   $self->initialise;
-  
+
   my %content = $self->content();
   my %field_mapping = (
     VpsProtocol => \($self->protocol),
@@ -421,15 +429,16 @@ sub auth_action {
     RelatedVPSTxId => 'parent_auth',
     RelatedVendorTxCode => 'parent_invoice_number',
     RelatedSecurityKey => 'authentication_key',
+    RelatedTxAuthNo => 'authentication_number'
   );
   my %post_data = $self->do_remap(\%content,%field_mapping);
 
   if($ENV{'SAGEPAY_DEBUG'}) {
-    Dwarn %post_data;
+    Dwarn {%post_data};
   }
 
   $self->path($servers{$self->{'_server'}}->{lc $post_data{'TxType'}});
-  my ($page, $response, %headers) = 
+  my ($page, $response, %headers) =
     post_https(
       $self->server,
       $self->port,
@@ -476,35 +485,35 @@ sub sanitised_content {
     $content{'expiration'} =~ s#/##g;
     $content{'startdate'} =~ s#/##g if $content{'startdate'};
 
-    $content{'card_name'} = 
-        $content{'name_on_card'} 
+    $content{'card_name'} =
+        $content{'name_on_card'}
       || $content{'first_name'} . ' ' . ($content{'last_name'}||"");
-    $content{'customer_name'} = 
+    $content{'customer_name'} =
         $content{'customer_name'}
-      || $content{'first_name'} ? 
+      || $content{'first_name'} ?
             $content{'first_name'} . ' ' . $content{'last_name'} : undef;
     # new protocol requires first and last name - do some people even have both!?
-    $content{'last_name'} ||= $content{'first_name'}; 
+    $content{'last_name'} ||= $content{'first_name'};
     $content{'action'} = $action{ lc $content{'action'} };
     $content{'card_type'} = $card_type{lc $content{'type'}};
     $content{'amount'} = format_amount($content{'amount'})
       if $content{'amount'};
   }
-  
+
   return \%content;
 }
 
 sub post_request {
   my ($self,$type,$data) = @_;
-  
+
   $self->path($servers{$self->{'_server'}}->{$type});
-  
+
   if($ENV{'SAGEPAY_DEBUG'}) {
     warn sprintf("Posting to %s:%s%s",
       $self->server, $self->port, $self->path);
     Dwarn $data;
   }
-  
+
   my ($page, $response, %headers) = post_https(
     $self->server,
     $self->port,
@@ -512,7 +521,7 @@ sub post_request {
     undef,
     make_form( %$data )
   );
-  
+
   unless ($page) {
     $self->error_message($status->{TIMEOUT});
     $self->is_success(0);
@@ -530,7 +539,7 @@ sub submit {
   my $self = shift;
   $self->initialise;
   my $content = $self->sanitised_content;
-  
+
   my %field_mapping = (
     VpsProtocol => \($self->protocol),
     Vendor      => \($self->vendor),
@@ -576,13 +585,13 @@ sub submit {
   if($ENV{'SAGEPAY_DEBUG'}) {
     warn "Authentication Form:";
     Dwarn {
-      %post_data, 
-      CV2 => "XXX", 
+      %post_data,
+      CV2 => "XXX",
       CardNumber => "XXXX XXXX XXXX XXXX"
     };
   }
 
-  $self->path($servers{$self->{'_server'}}->{'authorise'}) 
+  $self->path($servers{$self->{'_server'}}->{'authorise'})
     if $post_data{'TxType'} eq 'AUTHORISE';
   my ($page, $response, %headers) = post_https(
     $self->server,
@@ -607,7 +616,7 @@ sub submit {
   $self->authorization_code($rf->{'TxAuthNo'});
 
   if (
-    ($self->result_code eq SAGEPAY_STATUS_3DSECURE) && 
+    ($self->result_code eq SAGEPAY_STATUS_3DSECURE) &&
     ($rf->{'3DSecureStatus'} eq SAGEPAY_STATUS_OK)
   ) {
     $self->require_3d(1);
@@ -635,7 +644,7 @@ sub submit {
     $rf->{'Status'} eq SAGEPAY_STATUS_PAYPAL_REDIRECT ||
     $rf->{'Status'} eq SAGEPAY_STATUS_OK ||
     $rf->{'Status'} eq SAGEPAY_STATUS_AUTHENTICATED ||
-    $rf->{'Status'} eq SAGEPAY_STATUS_REGISTERED 
+    $rf->{'Status'} eq SAGEPAY_STATUS_REGISTERED
     ? 1 : 0)) {
       my $code = substr $rf->{'StatusDetail'}, 0 ,4;
 
@@ -770,7 +779,7 @@ L<Business::OnlinePayment>
 =head1 AUTHOR
 
   purge: Simon Elliott <cpan@browsing.co.uk>
-  
+
   cubabit: Pete Smith
 
 =head1 ACKNOWLEDGEMENTS
