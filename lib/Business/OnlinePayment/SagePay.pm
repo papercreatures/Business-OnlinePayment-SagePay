@@ -578,6 +578,7 @@ sub submit {
     CustomerEmail => 'email',
 
     PayPalCallbackURL => 'paypal_callback_uri',
+    BillingAgreement => 'billing_agreement',
   );
 
   my %post_data = $self->do_remap($content,%field_mapping);
