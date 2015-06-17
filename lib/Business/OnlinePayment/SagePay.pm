@@ -464,6 +464,8 @@ sub auth_action {
   $self->server_response($rf);
   $self->result_code($rf->{'Status'});
   $self->authorization($rf->{'VPSTxId'});
+  $self->authorization_code($rf->{'TxAuthNo'}) if defined $rf->{'TxAuthNo'};
+  $self->authentication_key($rf->{'SecurityKey'}) if defined $rf->{'SecurityKey'};
   unless($self->is_success($rf->{'Status'} eq SAGEPAY_STATUS_OK ? 1 : 0)) {
     if($ENV{'SAGEPAY_DEBUG_ERROR_ONLY'}) {
       Dwarn $rf;
@@ -578,6 +580,7 @@ sub submit {
     CustomerEmail => 'email',
 
     PayPalCallbackURL => 'paypal_callback_uri',
+    BillingAgreement => 'billing_agreement',
   );
 
   my %post_data = $self->do_remap($content,%field_mapping);

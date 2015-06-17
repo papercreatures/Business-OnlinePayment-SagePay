@@ -31,10 +31,11 @@ my $tx = Business::OnlinePayment->new(
 );
 ok($tx, 'Transaction object');
 
-$tx->content( 
+$tx->content(
     create_transaction(),
     type => 'paypal',
     paypal_callback_uri => 'http://localhost',
+    billing_agreement => 1,
 );
 
 $tx->set_server('simulator');
